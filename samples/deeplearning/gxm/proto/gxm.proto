@@ -584,9 +584,7 @@ message FusedConvBNParameter {
   optional bool bn_bwd = 27 [default = false];
   optional bool bn_relu_fwd = 28 [default = false];
   optional bool bstats_relu_bwd = 29 [default = false];
-  optional bool own_bn_fwd = 38 [default = false];
-  optional bool own_bstats_bwd = 39 [default = false];
-  optional bool own_bstats_relu_bwd = 40 [default = false];
+  optional bool split = 38 [default = false];
   optional bool physical_padding = 30 [default = false];
 
   // If false, accumulate global mean/variance values via a moving average. If

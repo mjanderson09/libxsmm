@@ -85,10 +85,10 @@ node {
   }
 }
 node {
-  name: "node_64_1_convbn4"
-  type: "FusedConvBN"
+  name: "node_64_1_conv4"
+  type: "Convolution"
   bottom: "conv1_pool"
-  top: "node_64_1_convbn4"
+  top: "node_64_1_conv4"
   param {
     lr_mult: 1.0
     decay_mult: 1.0
@@ -97,14 +97,13 @@ node {
     lr_mult: 1.0
     decay_mult: 0.0
   }
-  fused_conv_bn_param {
+  convolution_param {
     data_type: FLOAT
     engine: XSMM
     num_output: 256
     pad: 0
-    bstats_fwd: true
-    bn_bwd: false
     kernel_size: 1
+    bias_term: false
     stride: 1
     weight_filler {
       type: "msra"
@@ -124,7 +123,7 @@ node {
     stride: 1
     engine: XSMM
   }
-  bottom: "node_64_1_convbn4"
+  bottom: "node_64_1_conv4"
   top: "node_64_1_bn4"
 }
 node {
@@ -212,7 +211,7 @@ node {
     physical_padding: false
     bstats_fwd: true
     bn_relu_fwd: true
-    bn_bwd: false
+    bn_bwd: true
     bstats_relu_bwd: true
     kernel_size: 1
     stride: 1
@@ -224,39 +223,12 @@ node {
   }
 }
 node {
-  name: "node_64_1_bn3"
-  type: "FusedBatchNorm"
-  fused_bnorm_param {
-    data_type: FLOAT
-    use_global_stats: false
-    eltwise: false
-    relu: false
-    bwd_relu: false
-    pad: 0
-    stride: 1
-    engine: XSMM
-  }
-  bottom: "node_64_1_convbn3"
-  top: "node_64_1_bn3"
-}
-node {
-  name: "node_64_1_eltwise"
-  type: "Eltwise"
-  bottom: "node_64_1_bn3"
-  bottom: "node_64_1_bn4"
-  top: "node_64_1_eltwise"
-}
-node {
-  name: "node_64_1_relu"
-  type: "ReLU"
-  bottom: "node_64_1_eltwise"
-  top: "node_64_1_relu"
-}
-node {
   name: "node_64_2_convbn1"
   type: "FusedConvBN"
-  bottom: "node_64_1_relu"
+  bottom: "node_64_1_convbn3"
+  bottom: "node_64_1_bn4"
   top: "node_64_2_convbn1"
+  top: "node_64_2_convbn1_res"
   param {
     lr_mult: 1.0
     decay_mult: 1.0
@@ -271,7 +243,11 @@ node {
     num_output: 64
     opad: 0
     bstats_fwd: true
+    bn_relu_fwd: true
     bn_bwd: true
+    bstats_relu_bwd: true
+    eltwise: true
+    split: true
     kernel_size: 1
     stride: 1
     weight_filler {
@@ -332,7 +308,7 @@ node {
     pad: 0
     bstats_fwd: true
     bn_relu_fwd: true
-    bn_bwd: false
+    bn_bwd: true
     bstats_relu_bwd: true
     kernel_size: 1
     stride: 1
@@ -343,39 +319,12 @@ node {
   }
 }
 node {
-  name: "node_64_2_bn3"
-  type: "FusedBatchNorm"
-  fused_bnorm_param {
-    data_type: FLOAT
-    use_global_stats: false
-    eltwise: false
-    relu: false
-    bwd_relu: false
-    pad: 0
-    stride: 1
-    engine: XSMM
-  }
-  bottom: "node_64_2_convbn3"
-  top: "node_64_2_bn3"
-}
-node {
-  name: "node_64_2_eltwise"
-  type: "Eltwise"
-  bottom: "node_64_2_bn3"
-  bottom: "node_64_1_relu"
-  top: "node_64_2_eltwise"
-}
-node {
-  name: "node_64_2_relu"
-  type: "ReLU"
-  bottom: "node_64_2_eltwise"
-  top: "node_64_2_relu"
-}
-node {
   name: "node_64_3_convbn1"
   type: "FusedConvBN"
-  bottom: "node_64_2_relu"
+  bottom: "node_64_2_convbn3"
+  bottom: "node_64_2_convbn1_res"
   top: "node_64_3_convbn1"
+  top: "node_64_3_convbn1_res"
   param {
     lr_mult: 1.0
     decay_mult: 1.0
@@ -390,7 +339,10 @@ node {
     num_output: 64
     pad: 0
     bstats_fwd: true
+    bn_relu_fwd: true
     bn_bwd: true
+    eltwise: true
+    split: true
     kernel_size: 1
     stride: 1
     weight_filler {
@@ -451,7 +403,7 @@ node {
     pad: 0
     bstats_fwd: true
     bn_relu_fwd: true
-    bn_bwd: false
+    bn_bwd: true
     bstats_relu_bwd: true
     kernel_size: 1
     stride: 1
@@ -462,82 +414,12 @@ node {
   }
 }
 node {
-  name: "node_64_3_bn3"
-  type: "FusedBatchNorm"
-  fused_bnorm_param {
-    data_type: FLOAT
-    use_global_stats: false
-    eltwise: false
-    relu: false
-    bwd_relu: false
-    pad: 0
-    stride: 1
-    engine: XSMM
-  }
-  bottom: "node_64_3_convbn3"
-  top: "node_64_3_bn3"
-}
-node {
-  name: "node_64_3_eltwise"
-  type: "Eltwise"
-  bottom: "node_64_3_bn3"
-  bottom: "node_64_2_relu"
-  top: "node_64_3_eltwise"
-}
-node {
-  name: "node_64_3_relu"
-  type: "ReLU"
-  bottom: "node_64_3_eltwise"
-  top: "node_64_3_relu"
-}
-node {
-  name: "node_128_1_convbn4"
-  type: "FusedConvBN"
-  bottom: "node_64_3_relu"
-  top: "node_128_1_convbn4"
-  param {
-    lr_mult: 1.0
-    decay_mult: 1.0
-  }
-  param {
-    lr_mult: 1.0
-    decay_mult: 0.0
-  }
-  fused_conv_bn_param {
-    data_type: FLOAT
-    engine: XSMM
-    num_output: 512
-    pad: 0
-    bstats_fwd: true
-    bn_bwd: false
-    kernel_size: 1
-    stride: 2
-    weight_filler {
-      type: "msra"
-      variance_norm: FAN_OUT
-    }
-  }
-}
-node {
-  name: "node_128_1_bn4"
-  type: "FusedBatchNorm"
-  fused_bnorm_param {
-    data_type: FLOAT
-    use_global_stats: false
-    relu: false
-    bwd_relu: false
-    pad: 0
-    stride: 1
-    engine: XSMM
-  }
-  bottom: "node_128_1_convbn4"
-  top: "node_128_1_bn4"
-}
-node {
   name: "node_128_1_convbn1"
   type: "FusedConvBN"
-  bottom: "node_64_3_relu"
+  bottom: "node_64_3_convbn3"
+  bottom: "node_64_3_convbn1_res"
   top: "node_128_1_convbn1"
+  top: "node_128_1_convbn1_res"
   param {
     lr_mult: 1.0
     decay_mult: 1.0
@@ -552,7 +434,11 @@ node {
     num_output: 128
     pad: 0
     bstats_fwd: true
+    bn_relu_fwd: true
     bn_bwd: true
+    bstats_relu_bwd: true
+    eltwise: true
+    split: true
     kernel_size: 1
     stride: 2
     weight_filler {
@@ -613,7 +499,7 @@ node {
     pad: 0
     bstats_fwd: true
     bn_relu_fwd: true
-    bn_bwd: false
+    bn_bwd: true
     bstats_relu_bwd: true
     kernel_size: 1
     stride: 1
@@ -624,39 +510,55 @@ node {
   }
 }
 node {
-  name: "node_128_1_bn3"
+  name: "node_128_1_convbn4"
+  type: "FusedConvBN"
+  bottom: "node_128_1_convbn1_res"
+  top: "node_128_1_convbn4"
+  param {
+    lr_mult: 1.0
+    decay_mult: 1.0
+  }
+  param {
+    lr_mult: 1.0
+    decay_mult: 0.0
+  }
+  fused_conv_bn_param {
+    data_type: FLOAT
+    engine: XSMM
+    num_output: 512
+    pad: 0
+    bstats_fwd: true
+    bn_bwd: false
+    kernel_size: 1
+    stride: 2
+    weight_filler {
+      type: "msra"
+      variance_norm: FAN_OUT
+    }
+  }
+}
+node {
+  name: "node_128_1_bn4"
   type: "FusedBatchNorm"
   fused_bnorm_param {
     data_type: FLOAT
     use_global_stats: false
-    eltwise: false
     relu: false
     bwd_relu: false
     pad: 0
     stride: 1
     engine: XSMM
   }
-  bottom: "node_128_1_convbn3"
-  top: "node_128_1_bn3"
-}
-node {
-  name: "node_128_1_eltwise"
-  type: "Eltwise"
-  bottom: "node_128_1_bn3"
-  bottom: "node_128_1_bn4"
-  top: "node_128_1_eltwise"
-}
-node {
-  name: "node_128_1_relu"
-  type: "ReLU"
-  bottom: "node_128_1_eltwise"
-  top: "node_128_1_relu"
+  bottom: "node_128_1_convbn4"
+  top: "node_128_1_bn4"
 }
 node {
   name: "node_128_2_convbn1"
   type: "FusedConvBN"
-  bottom: "node_128_1_relu"
+  bottom: "node_128_1_convbn3"
+  bottom: "node_128_1_bn4"
   top: "node_128_2_convbn1"
+  top: "node_128_2_convbn1_res"
   param {
     lr_mult: 1.0
     decay_mult: 1.0
@@ -671,7 +573,11 @@ node {
     num_output: 128
     pad: 0
     bstats_fwd: true
+    bn_relu_fwd: true
     bn_bwd: true
+    bstats_relu_bwd: true
+    eltwise: true
+    split: true
     kernel_size: 1
     stride: 1
     weight_filler {
@@ -732,7 +638,7 @@ node {
     pad: 0
     bstats_fwd: true
     bn_relu_fwd: true
-    bn_bwd: false
+    bn_bwd: true
     bstats_relu_bwd: true
     kernel_size: 1
     stride: 1
@@ -743,39 +649,12 @@ node {
   }
 }
 node {
-  name: "node_128_2_bn3"
-  type: "FusedBatchNorm"
-  fused_bnorm_param {
-    data_type: FLOAT
-    use_global_stats: false
-    eltwise: false
-    relu: false
-    bwd_relu: false
-    pad: 0
-    stride: 1
-    engine: XSMM
-  }
-  bottom: "node_128_2_convbn3"
-  top: "node_128_2_bn3"
-}
-node {
-  name: "node_128_2_eltwise"
-  type: "Eltwise"
-  bottom: "node_128_2_bn3"
-  bottom: "node_128_1_relu"
-  top: "node_128_2_eltwise"
-}
-node {
-  name: "node_128_2_relu"
-  type: "ReLU"
-  bottom: "node_128_2_eltwise"
-  top: "node_128_2_relu"
-}
-node {
   name: "node_128_3_convbn1"
   type: "FusedConvBN"
-  bottom: "node_128_2_relu"
+  bottom: "node_128_2_convbn3"
+  bottom: "node_128_2_convbn1_res"
   top: "node_128_3_convbn1"
+  top: "node_128_3_convbn1_res"
   param {
     lr_mult: 1.0
     decay_mult: 1.0
@@ -790,7 +669,11 @@ node {
     num_output: 128
     pad: 0
     bstats_fwd: true
+    bn_relu_fwd: true
     bn_bwd: true
+    bstats_relu_bwd: true
+    eltwise: true
+    split: true
     kernel_size: 1
     stride: 1
     weight_filler {
@@ -851,7 +734,7 @@ node {
     pad: 0
     bstats_fwd: true
     bn_relu_fwd: true
-    bn_bwd: false
+    bn_bwd: true
     bstats_relu_bwd: true
     kernel_size: 1
     stride: 1
@@ -862,39 +745,12 @@ node {
   }
 }
 node {
-  name: "node_128_3_bn3"
-  type: "FusedBatchNorm"
-  fused_bnorm_param {
-    data_type: FLOAT
-    use_global_stats: false
-    eltwise: false
-    relu: false
-    bwd_relu: false
-    pad: 0
-    stride: 1
-    engine: XSMM
-  }
-  bottom: "node_128_3_convbn3"
-  top: "node_128_3_bn3"
-}
-node {
-  name: "node_128_3_eltwise"
-  type: "Eltwise"
-  bottom: "node_128_3_bn3"
-  bottom: "node_128_2_relu"
-  top: "node_128_3_eltwise"
-}
-node {
-  name: "node_128_3_relu"
-  type: "ReLU"
-  bottom: "node_128_3_eltwise"
-  top: "node_128_3_relu"
-}
-node {
   name: "node_128_4_convbn1"
   type: "FusedConvBN"
-  bottom: "node_128_3_relu"
+  bottom: "node_128_3_convbn3"
+  bottom: "node_128_3_convbn1_res"
   top: "node_128_4_convbn1"
+  top: "node_128_4_convbn1_res"
   param {
     lr_mult: 1.0
     decay_mult: 1.0
@@ -909,7 +765,11 @@ node {
     num_output: 128
     pad: 0
     bstats_fwd: true
+    bn_relu_fwd: true
     bn_bwd: true
+    bstats_relu_bwd: true
+    eltwise: true
+    split: true
     kernel_size: 1
     stride: 1
     weight_filler {
@@ -970,7 +830,7 @@ node {
     pad: 0
     bstats_fwd: true
     bn_relu_fwd: true
-    bn_bwd: false
+    bn_bwd: true
     bstats_relu_bwd: true
     kernel_size: 1
     stride: 1
@@ -981,82 +841,12 @@ node {
   }
 }
 node {
-  name: "node_128_4_bn3"
-  type: "FusedBatchNorm"
-  fused_bnorm_param {
-    data_type: FLOAT
-    use_global_stats: false
-    eltwise: false
-    relu: false
-    bwd_relu: false
-    pad: 0
-    stride: 1
-    engine: XSMM
-  }
-  bottom: "node_128_4_convbn3"
-  top: "node_128_4_bn3"
-}
-node {
-  name: "node_128_4_eltwise"
-  type: "Eltwise"
-  bottom: "node_128_4_bn3"
-  bottom: "node_128_3_relu"
-  top: "node_128_4_eltwise"
-}
-node {
-  name: "node_128_4_relu"
-  type: "ReLU"
-  bottom: "node_128_4_eltwise"
-  top: "node_128_4_relu"
-}
-node {
-  name: "node_256_1_convbn4"
-  type: "FusedConvBN"
-  bottom: "node_128_4_relu"
-  top: "node_256_1_convbn4"
-  param {
-    lr_mult: 1.0
-    decay_mult: 1.0
-  }
-  param {
-    lr_mult: 1.0
-    decay_mult: 0.0
-  }
-  fused_conv_bn_param {
-    data_type: FLOAT
-    engine: XSMM
-    num_output: 1024
-    pad: 0
-    bstats_fwd: true
-    bn_bwd: false
-    kernel_size: 1
-    stride: 2
-    weight_filler {
-      type: "msra"
-      variance_norm: FAN_OUT
-    }
-  }
-}
-node {
-  name: "node_256_1_bn4"
-  type: "FusedBatchNorm"
-  fused_bnorm_param {
-    data_type: FLOAT
-    use_global_stats: false
-    relu: false
-    bwd_relu: false
-    pad: 0
-    stride: 1
-    engine: XSMM
-  }
-  bottom: "node_256_1_convbn4"
-  top: "node_256_1_bn4"
-}
-node {
   name: "node_256_1_convbn1"
   type: "FusedConvBN"
-  bottom: "node_128_4_relu"
+  bottom: "node_128_4_convbn3"
+  bottom: "node_128_4_convbn1_res"
   top: "node_256_1_convbn1"
+  top: "node_256_1_convbn1_res"
   param {
     lr_mult: 1.0
     decay_mult: 1.0
@@ -1071,7 +861,11 @@ node {
     num_output: 256
     pad: 0
     bstats_fwd: true
+    bn_relu_fwd: true
     bn_bwd: true
+    bstats_relu_bwd: true
+    eltwise: true
+    split: true
     kernel_size: 1
     stride: 2
     weight_filler {
@@ -1132,7 +926,7 @@ node {
     pad: 0
     bstats_fwd: true
     bn_relu_fwd: true
-    bn_bwd: false
+    bn_bwd: true
     bstats_relu_bwd: true
     kernel_size: 1
     stride: 1
@@ -1143,39 +937,55 @@ node {
   }
 }
 node {
-  name: "node_256_1_bn3"
+  name: "node_256_1_convbn4"
+  type: "FusedConvBN"
+  bottom: "node_256_1_convbn1_res"
+  top: "node_256_1_convbn4"
+  param {
+    lr_mult: 1.0
+    decay_mult: 1.0
+  }
+  param {
+    lr_mult: 1.0
+    decay_mult: 0.0
+  }
+  fused_conv_bn_param {
+    data_type: FLOAT
+    engine: XSMM
+    num_output: 1024
+    pad: 0
+    bstats_fwd: true
+    bn_bwd: false
+    kernel_size: 1
+    stride: 2
+    weight_filler {
+      type: "msra"
+      variance_norm: FAN_OUT
+    }
+  }
+}
+node {
+  name: "node_256_1_bn4"
   type: "FusedBatchNorm"
   fused_bnorm_param {
     data_type: FLOAT
     use_global_stats: false
-    eltwise: false
     relu: false
     bwd_relu: false
     pad: 0
     stride: 1
     engine: XSMM
   }
-  bottom: "node_256_1_convbn3"
-  top: "node_256_1_bn3"
-}
-node {
-  name: "node_256_1_eltwise"
-  type: "Eltwise"
-  bottom: "node_256_1_bn3"
-  bottom: "node_256_1_bn4"
-  top: "node_256_1_eltwise"
-}
-node {
-  name: "node_256_1_relu"
-  type: "ReLU"
-  bottom: "node_256_1_eltwise"
-  top: "node_256_1_relu"
+  bottom: "node_256_1_convbn4"
+  top: "node_256_1_bn4"
 }
 node {
   name: "node_256_2_convbn1"
   type: "FusedConvBN"
-  bottom: "node_256_1_relu"
+  bottom: "node_256_1_convbn3"
+  bottom: "node_256_1_bn4"
   top: "node_256_2_convbn1"
+  top: "node_256_2_convbn1_res"
   param {
     lr_mult: 1.0
     decay_mult: 1.0
@@ -1190,7 +1000,11 @@ node {
     num_output: 256
     pad: 0
     bstats_fwd: true
+    bn_relu_fwd: true
     bn_bwd: true
+    bstats_relu_bwd: true
+    eltwise: true
+    split: true
     kernel_size: 1
     stride: 1
     weight_filler {
@@ -1251,7 +1065,7 @@ node {
     pad: 0
     bstats_fwd: true
     bn_relu_fwd: true
-    bn_bwd: false
+    bn_bwd: true
     bstats_relu_bwd: true
     kernel_size: 1
     stride: 1
@@ -1262,39 +1076,12 @@ node {
   }
 }
 node {
-  name: "node_256_2_bn3"
-  type: "FusedBatchNorm"
-  fused_bnorm_param {
-    data_type: FLOAT
-    use_global_stats: false
-    eltwise: false
-    relu: false
-    bwd_relu: false
-    pad: 0
-    stride: 1
-    engine: XSMM
-  }
-  bottom: "node_256_2_convbn3"
-  top: "node_256_2_bn3"
-}
-node {
-  name: "node_256_2_eltwise"
-  type: "Eltwise"
-  bottom: "node_256_2_bn3"
-  bottom: "node_256_1_relu"
-  top: "node_256_2_eltwise"
-}
-node {
-  name: "node_256_2_relu"
-  type: "ReLU"
-  bottom: "node_256_2_eltwise"
-  top: "node_256_2_relu"
-}
-node {
   name: "node_256_3_convbn1"
   type: "FusedConvBN"
-  bottom: "node_256_2_relu"
+  bottom: "node_256_2_convbn3"
+  bottom: "node_256_2_convbn1_res"
   top: "node_256_3_convbn1"
+  top: "node_256_3_convbn1_res"
   param {
     lr_mult: 1.0
     decay_mult: 1.0
@@ -1309,7 +1096,11 @@ node {
     num_output: 256
     pad: 0
     bstats_fwd: true
+    bn_relu_fwd: true
     bn_bwd: true
+    bstats_relu_bwd: true
+    eltwise: true
+    split: true
     kernel_size: 1
     stride: 1
     weight_filler {
@@ -1370,7 +1161,7 @@ node {
     pad: 0
     bstats_fwd: true
     bn_relu_fwd: true
-    bn_bwd: false
+    bn_bwd: true
     bstats_relu_bwd: true
     kernel_size: 1
     stride: 1
@@ -1381,39 +1172,12 @@ node {
   }
 }
 node {
-  name: "node_256_3_bn3"
-  type: "FusedBatchNorm"
-  fused_bnorm_param {
-    data_type: FLOAT
-    use_global_stats: false
-    eltwise: false
-    relu: false
-    bwd_relu: false
-    pad: 0
-    stride: 1
-    engine: XSMM
-  }
-  bottom: "node_256_3_convbn3"
-  top: "node_256_3_bn3"
-}
-node {
-  name: "node_256_3_eltwise"
-  type: "Eltwise"
-  bottom: "node_256_3_bn3"
-  bottom: "node_256_2_relu"
-  top: "node_256_3_eltwise"
-}
-node {
-  name: "node_256_3_relu"
-  type: "ReLU"
-  bottom: "node_256_3_eltwise"
-  top: "node_256_3_relu"
-}
-node {
   name: "node_256_4_convbn1"
   type: "FusedConvBN"
-  bottom: "node_256_3_relu"
+  bottom: "node_256_3_convbn3"
+  bottom: "node_256_3_convbn1_res"
   top: "node_256_4_convbn1"
+  top: "node_256_4_convbn1_res"
   param {
     lr_mult: 1.0
     decay_mult: 1.0
@@ -1428,7 +1192,11 @@ node {
     num_output: 256
     pad: 0
     bstats_fwd: true
+    bn_relu_fwd: true
     bn_bwd: true
+    bstats_relu_bwd: true
+    eltwise: true
+    split: true
     kernel_size: 1
     stride: 1
     weight_filler {
@@ -1489,7 +1257,7 @@ node {
     pad: 0
     bstats_fwd: true
     bn_relu_fwd: true
-    bn_bwd: false
+    bn_bwd: true
     bstats_relu_bwd: true
     kernel_size: 1
     stride: 1
@@ -1500,39 +1268,12 @@ node {
   }
 }
 node {
-  name: "node_256_4_bn3"
-  type: "FusedBatchNorm"
-  fused_bnorm_param {
-    data_type: FLOAT
-    use_global_stats: false
-    eltwise: false
-    relu: false
-    bwd_relu: false
-    pad: 0
-    stride: 1
-    engine: XSMM
-  }
-  bottom: "node_256_4_convbn3"
-  top: "node_256_4_bn3"
-}
-node {
-  name: "node_256_4_eltwise"
-  type: "Eltwise"
-  bottom: "node_256_4_bn3"
-  bottom: "node_256_3_relu"
-  top: "node_256_4_eltwise"
-}
-node {
-  name: "node_256_4_relu"
-  type: "ReLU"
-  bottom: "node_256_4_eltwise"
-  top: "node_256_4_relu"
-}
-node {
   name: "node_256_5_convbn1"
   type: "FusedConvBN"
-  bottom: "node_256_4_relu"
+  bottom: "node_256_4_convbn3"
+  bottom: "node_256_4_convbn1_res"
   top: "node_256_5_convbn1"
+  top: "node_256_5_convbn1_res"
   param {
     lr_mult: 1.0
     decay_mult: 1.0
@@ -1547,7 +1288,11 @@ node {
     num_output: 256
     pad: 0
     bstats_fwd: true
+    bn_relu_fwd: true
     bn_bwd: true
+    bstats_relu_bwd: true
+    eltwise: true
+    split: true
     kernel_size: 1
     stride: 1
     weight_filler {
@@ -1608,7 +1353,7 @@ node {
     pad: 0
     bstats_fwd: true
     bn_relu_fwd: true
-    bn_bwd: false
+    bn_bwd: true
     bstats_relu_bwd: true
     kernel_size: 1
     weight_filler {
@@ -1618,39 +1363,12 @@ node {
   }
 }
 node {
-  name: "node_256_5_bn3"
-  type: "FusedBatchNorm"
-  fused_bnorm_param {
-    data_type: FLOAT
-    use_global_stats: false
-    eltwise: false
-    relu: false
-    bwd_relu: false
-    pad: 0
-    stride: 1
-    engine: XSMM
-  }
-  bottom: "node_256_5_convbn3"
-  top: "node_256_5_bn3"
-}
-node {
-  name: "node_256_5_eltwise"
-  type: "Eltwise"
-  bottom: "node_256_5_bn3"
-  bottom: "node_256_4_relu"
-  top: "node_256_5_eltwise"
-}
-node {
-  name: "node_256_5_relu"
-  type: "ReLU"
-  bottom: "node_256_5_eltwise"
-  top: "node_256_5_relu"
-}
-node {
   name: "node_256_6_convbn1"
   type: "FusedConvBN"
-  bottom: "node_256_5_relu"
+  bottom: "node_256_5_convbn3"
+  bottom: "node_256_5_convbn1_res"
   top: "node_256_6_convbn1"
+  top: "node_256_6_convbn1_res"
   param {
     lr_mult: 1.0
     decay_mult: 1.0
@@ -1665,7 +1383,11 @@ node {
     num_output: 256
     pad: 0
     bstats_fwd: true
+    bn_relu_fwd: true
     bn_bwd: true
+    bstats_relu_bwd: true
+    eltwise: true
+    split: true
     kernel_size: 1
     stride: 1
     weight_filler {
@@ -1726,7 +1448,7 @@ node {
     pad: 0
     bstats_fwd: true
     bn_relu_fwd: true
-    bn_bwd: false
+    bn_bwd: true
     bstats_relu_bwd: true
     kernel_size: 1
     stride: 1
@@ -1737,82 +1459,12 @@ node {
   }
 }
 node {
-  name: "node_256_6_bn3"
-  type: "FusedBatchNorm"
-  fused_bnorm_param {
-    data_type: FLOAT
-    use_global_stats: false
-    eltwise: false
-    relu: false
-    bwd_relu: false
-    pad: 0
-    stride: 1
-    engine: XSMM
-  }
-  bottom: "node_256_6_convbn3"
-  top: "node_256_6_bn3"
-}
-node {
-  name: "node_256_6_eltwise"
-  type: "Eltwise"
-  bottom: "node_256_6_bn3"
-  bottom: "node_256_5_relu"
-  top: "node_256_6_eltwise"
-}
-node {
-  name: "node_256_6_relu"
-  type: "ReLU"
-  bottom: "node_256_6_eltwise"
-  top: "node_256_6_relu"
-}
-node {
-  name: "node_512_1_convbn4"
-  type: "FusedConvBN"
-  bottom: "node_256_6_relu"
-  top: "node_512_1_convbn4"
-  param {
-    lr_mult: 1.0
-    decay_mult: 1.0
-  }
-  param {
-    lr_mult: 1.0
-    decay_mult: 0.0
-  }
-  fused_conv_bn_param {
-    data_type: FLOAT
-    engine: XSMM
-    num_output: 2048
-    pad: 0
-    bstats_fwd: true
-    bn_bwd: false
-    kernel_size: 1
-    stride: 2
-    weight_filler {
-      type: "msra"
-      variance_norm: FAN_OUT
-    }
-  }
-}
-node {
-  name: "node_512_1_bn4"
-  type: "FusedBatchNorm"
-  fused_bnorm_param {
-    data_type: FLOAT
-    use_global_stats: false
-    relu: false
-    bwd_relu: false
-    pad: 0
-    stride: 1
-    engine: XSMM
-  }
-  bottom: "node_512_1_convbn4"
-  top: "node_512_1_bn4"
-}
-node {
   name: "node_512_1_convbn1"
   type: "FusedConvBN"
-  bottom: "node_256_6_relu"
+  bottom: "node_256_6_convbn3"
+  bottom: "node_256_6_convbn1_res"
   top: "node_512_1_convbn1"
+  top: "node_512_1_convbn1_res"
   param {
     lr_mult: 1.0
     decay_mult: 1.0
@@ -1827,7 +1479,11 @@ node {
     num_output: 512
     pad: 0
     bstats_fwd: true
+    bn_relu_fwd: true
     bn_bwd: true
+    bstats_relu_bwd: true
+    eltwise: true
+    split: true
     kernel_size: 1
     stride: 2
     weight_filler {
@@ -1887,7 +1543,7 @@ node {
     num_output: 2048
     pad: 0
     bstats_fwd: true
-    bn_bwd: false
+    bn_bwd: true
     bn_relu_fwd: true
     bstats_relu_bwd: true
     kernel_size: 1
@@ -1899,39 +1555,55 @@ node {
   }
 }
 node {
-  name: "node_512_1_bn3"
+  name: "node_512_1_convbn4"
+  type: "FusedConvBN"
+  bottom: "node_512_1_convbn1_res"
+  top: "node_512_1_convbn4"
+  param {
+    lr_mult: 1.0
+    decay_mult: 1.0
+  }
+  param {
+    lr_mult: 1.0
+    decay_mult: 0.0
+  }
+  fused_conv_bn_param {
+    data_type: FLOAT
+    engine: XSMM
+    num_output: 2048
+    pad: 0
+    bstats_fwd: true
+    bn_bwd: false
+    kernel_size: 1
+    stride: 2
+    weight_filler {
+      type: "msra"
+      variance_norm: FAN_OUT
+    }
+  }
+}
+node {
+  name: "node_512_1_bn4"
   type: "FusedBatchNorm"
   fused_bnorm_param {
     data_type: FLOAT
     use_global_stats: false
-    eltwise: false
     relu: false
     bwd_relu: false
     pad: 0
     stride: 1
     engine: XSMM
   }
-  bottom: "node_512_1_convbn3"
-  top: "node_512_1_bn3"
-}
-node {
-  name: "node_512_1_eltwise"
-  type: "Eltwise"
-  bottom: "node_512_1_bn3"
-  bottom: "node_512_1_bn4"
-  top: "node_512_1_eltwise"
-}
-node {
-  name: "node_512_1_relu"
-  type: "ReLU"
-  bottom: "node_512_1_eltwise"
-  top: "node_512_1_relu"
+  bottom: "node_512_1_convbn4"
+  top: "node_512_1_bn4"
 }
 node {
   name: "node_512_2_convbn1"
   type: "FusedConvBN"
-  bottom: "node_512_1_relu"
+  bottom: "node_512_1_convbn3"
+  bottom: "node_512_1_bn4"
   top: "node_512_2_convbn1"
+  top: "node_512_2_convbn1_res"
   param {
     lr_mult: 1.0
     decay_mult: 1.0
@@ -1946,7 +1618,11 @@ node {
     num_output: 512
     pad: 0
     bstats_fwd: true
+    bn_relu_fwd: true
     bn_bwd: true
+    bstats_relu_bwd: true
+    eltwise: true
+    split: true
     kernel_size: 1
     stride: 1
     weight_filler {
@@ -2007,7 +1683,7 @@ node {
     pad: 0
     bstats_fwd: true
     bn_relu_fwd: true
-    bn_bwd: false
+    bn_bwd: true
     bstats_relu_bwd: true
     kernel_size: 1
     stride: 1
@@ -2018,39 +1694,12 @@ node {
   }
 }
 node {
-  name: "node_512_2_bn3"
-  type: "FusedBatchNorm"
-  fused_bnorm_param {
-    data_type: FLOAT
-    use_global_stats: false
-    eltwise: false
-    relu: false
-    bwd_relu: false
-    pad: 0
-    stride: 1
-    engine: XSMM
-  }
-  bottom: "node_512_2_convbn3"
-  top: "node_512_2_bn3"
-}
-node {
-  name: "node_512_2_eltwise"
-  type: "Eltwise"
-  bottom: "node_512_2_bn3"
-  bottom: "node_512_1_relu"
-  top: "node_512_2_eltwise"
-}
-node {
-  name: "node_512_2_relu"
-  type: "ReLU"
-  bottom: "node_512_2_eltwise"
-  top: "node_512_2_relu"
-}
-node {
   name: "node_512_3_convbn1"
   type: "FusedConvBN"
-  bottom: "node_512_2_relu"
+  bottom: "node_512_2_convbn3"
+  bottom: "node_512_2_convbn1_res"
   top: "node_512_3_convbn1"
+  top: "node_512_3_convbn1_res"
   param {
     lr_mult: 1.0
     decay_mult: 1.0
@@ -2065,7 +1714,11 @@ node {
     num_output: 512
     pad: 0
     bstats_fwd: true
+    bn_relu_fwd: true
     bn_bwd: true
+    bstats_relu_bwd: true
+    eltwise: true
+    split: true
     kernel_size: 1
     stride: 1
     weight_filler {
@@ -2156,7 +1809,7 @@ node {
   name: "node_512_3_eltwise"
   type: "Eltwise"
   bottom: "node_512_3_bn3"
-  bottom: "node_512_2_relu"
+  bottom: "node_512_3_convbn1_res"
   top: "node_512_3_eltwise"
 }
 node {

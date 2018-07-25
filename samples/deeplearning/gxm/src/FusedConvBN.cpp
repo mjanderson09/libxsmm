@@ -52,40 +52,49 @@ FusedConvBNNode::FusedConvBNNode(FusedConvBNParams* p, MLEngine* e): NNNode(p, e
   bstats_ = p->get_bstats_fwd();
   bot_compute_engine_ = p->get_compute_engine();
 
-  assert((bottom_.size() == 1) && (top_.size() == 1));
+  tenTop_.resize(top_.size());
+  tenTopData_.resize(top_.size());
 
-  tenTop_ = new Tensor(top_[0]);
-  assert(tenTop_ != NULL);
-  tenTop_->setOwner(this);
-  tenTop_->setType(ACT);
-  tenTopData_ = tenTop_->getBuf(DATA);
-  tenTopData_->setBufferType(DATA);
+  for(int i=0; i < top_.size(); i++)
+  {
+    tenTop_[i] = new Tensor(top_[i]);
+    assert(tenTop_[i] != NULL);
+    tenTop_[i]->setOwner(this);
+    tenTop_[i]->setType(ACT);
+    tenTopData_[i] = tenTop_[i]->getBuf(DATA);
+    tenTopData_[i]->setBufferType(DATA);
+  }
 
+  tenBot_.resize(bottom_.size());
+  tenBotData_.resize(bottom_.size());
+
+  for(int i=0; i < bottom_.size(); i++)
+  {
 #ifndef NDEBUG
-  printf("bottom name %s\n",bottom_[0].c_str());
+    printf("bottom%d name %s\n",i,bottom_[i].c_str());
 #endif
 
-  if(bottom_[0] == "data")
-    tenBot_ = e->get_tensor(bottom_[0], INPUT);
-  else
-    tenBot_ = e->get_tensor(bottom_[0], ACT);
+    if(bottom_[i] == "data")
+      tenBot_[i] = e->get_tensor(bottom_[i], INPUT);
+    else
+      tenBot_[i] = e->get_tensor(bottom_[i], ACT);
 
-  assert(tenBot_ != NULL);
-  NNNode *pnn = (NNNode*)tenBot_->getOwner();
-  setPrevNode(pnn);
-  mode_ = pnn->getMode();
-  pnn->set_top_compute_engine(p->get_compute_engine());
-  bot_cengine_ = pnn->get_bot_compute_engine();
+    assert(tenBot_[i] != NULL);
+    NNNode *pnn = (NNNode*)tenBot_[i]->getOwner();
+    setPrevNode(pnn);
+    mode_ = pnn->getMode();
+    pnn->set_top_compute_engine(p->get_compute_engine());
+    bot_cengine_ = pnn->get_bot_compute_engine();
 
-  tenBotData_ = tenBot_->getBuf(DATA);
+    tenBotData_[i] = tenBot_[i]->getBuf(DATA);
 
-  int out_dtype = p->get_data_type();
-  int in_dtype = tenBotData_->getDataType();
+    int out_dtype = p->get_data_type();
 
-  tenTopData_->setDataType(out_dtype);
+    tenTopData_[i]->setDataType(out_dtype);
+  }
 
   // Get input tensor shape (bottom)
-  Shape* bs = tenBot_->getShape();
+  Shape* bs = tenBot_[0]->getShape();
   assert(bs->ndims <= MAX_DIMS);
 
   // Create shape of output tensor (top)
@@ -127,7 +136,9 @@ FusedConvBNNode::FusedConvBNNode(FusedConvBNParams* p, MLEngine* e): NNNode(p, e
       ts_.dims[4] = (bs->dims[4] - vd[2] + 2*vp[2])/vs[2] + 1; // Depth (for 3D)
   }
 
-  tenTop_->setShape(&ts_);
+  tenTop_[0]->setShape(&ts_);
+  if(top_.size() > 1)
+    tenTop_[1]->setShape(tenBot_[1]->getShape());
 
   long long int tsize;
   int telem;
@@ -145,7 +156,7 @@ FusedConvBNNode::FusedConvBNNode(FusedConvBNParams* p, MLEngine* e): NNNode(p, e
   // Conv out + Conv saved out + unreduced batch stats + reduced batch stats + unreduced dgamma/dbeta + reduced dgamma/dbeta
   tsize = 2*telem*sizeof(float) + tstats*(sizeof(float) + sizeof(float)) + 4*ts_.dims[1]*sizeof(float); 
 
-  tenTopData_->setBufferSize(tsize);
+  tenTopData_[0]->setBufferSize(tsize);
 
   // Create FP weight tensor
   weight_ = top_[0] + "_wt";
@@ -180,6 +191,9 @@ FusedConvBNNode::FusedConvBNNode(FusedConvBNParams* p, MLEngine* e): NNNode(p, e
   long long int wsize;
   for(int i=0; i<ws_.ndims; i++)
     welem = welem*ws_.dims[i];
+
+  int in_dtype = tenBotData_[0]->getDataType();
+  int out_dtype = tenTopData_[0]->getDataType();
 
   // size of weights -- always in FP32.
   if((in_dtype == DT_FLOAT) && (out_dtype == DT_FLOAT))
@@ -250,11 +264,15 @@ FusedConvBNNode::FusedConvBNNode(FusedConvBNParams* p, MLEngine* e): NNNode(p, e
   tenRstdevData_->setBufferSize(tsize);
 
   if(!e->is_inference_only()) {
+    tenBotDiff_.resize(bottom_.size());
     if(bp_flag_)
     {
-      tenBotDiff_ = tenBot_->addBuf(); // DIFF type and index
-      tenBotDiff_->setDataType(in_dtype);
-      tenBotDiff_->setBufferType(DIFF);
+      for(int i=0; i<bottom_.size(); i++)
+      {
+        tenBotDiff_[i] = tenBot_[i]->addBuf(); // DIFF type and index
+        tenBotDiff_[i]->setDataType(in_dtype);
+        tenBotDiff_[i]->setBufferType(DIFF);
+      }
 
       long long int bsize;
       
@@ -270,7 +288,8 @@ FusedConvBNNode::FusedConvBNNode(FusedConvBNParams* p, MLEngine* e): NNNode(p, e
         bsize = bsize*sizeof(short);
 
       // Set the size of the input-gradient buffer
-      tenBotDiff_->setBufferSize(bsize);
+      for(int i=0; i<bottom_.size(); i++)
+        tenBotDiff_[i]->setBufferSize(bsize);
     }
 
     if(has_weights_)
@@ -309,7 +328,9 @@ FusedConvBNNode::FusedConvBNNode(FusedConvBNParams* p, MLEngine* e): NNNode(p, e
     }
   }
   else {
-    tenBotDiff_ = NULL;
+    tenBotDiff_.resize(bottom_.size());
+    for(int i=0; i<bottom_.size(); i++)
+      tenBotDiff_[i] = NULL;
     tenWeightDiff_ = NULL;
     tenWeightInc_ = NULL;
     tenScaleDiff_ = NULL;
@@ -319,9 +340,13 @@ FusedConvBNNode::FusedConvBNNode(FusedConvBNParams* p, MLEngine* e): NNNode(p, e
   }
 
   // Register output tensor in tensor map
-  bool inserted = e->register_tensor(top_[0], ACT, tenTop_);
-  if(!inserted)
-    printf("Warning: Tensor %s already registered\n",top_[0].c_str());
+  bool inserted;
+  for(int i=0; i<top_.size(); i++)
+  {
+    inserted = e->register_tensor(top_[i], ACT, tenTop_[i]);
+    if(!inserted)
+      printf("Warning: Tensor %s already registered\n",top_[i].c_str());
+  }
 
   // Register weight tensor in weight tensor map
   inserted = e->register_tensor(weight_, CONVWEIGHT, tenWeight_);
@@ -400,14 +425,12 @@ FusedConvBNNode::FusedConvBNNode(FusedConvBNParams* p, MLEngine* e): NNNode(p, e
   gparams_.relu_fwd = p->get_relu_fwd();
   gparams_.relu_bwd = p->get_relu_bwd();
   gparams_.bn_fwd = p->get_bn_fwd();
-  gparams_.own_bn_fwd = p->get_own_bn_fwd();
   gparams_.bn_bwd = p->get_bn_bwd();
   gparams_.bn_relu_fwd = p->get_bn_relu_fwd();
   gparams_.bstats_fwd = bstats_;
   gparams_.bstats_bwd = p->get_bstats_bwd();
   gparams_.bstats_relu_bwd = p->get_bstats_relu_bwd();
-  gparams_.own_bstats_bwd = p->get_own_bstats_bwd();
-  gparams_.own_bstats_relu_bwd = p->get_own_bstats_relu_bwd();
+  gparams_.split = p->get_split();
 
   gparams_.mmf = p->get_mmf();
   gparams_.eps = p->get_eps();
@@ -486,8 +509,8 @@ void FusedConvBNNode::fillWeightBuffers(TensorBuf* tBuf, int buftype, long long 
       MPI_Bcast(ptr, welem, MPI_FLOAT, 0, MPI_COMM_WORLD);
 #endif
 
-    int in_dtype = tenBotData_->getDataType();
-    int out_dtype = tenTopData_->getDataType();
+    int in_dtype = tenBotData_[0]->getDataType();
+    int out_dtype = tenTopData_[0]->getDataType();
   }
   else
     memset(ptr, 0, size);
@@ -523,7 +546,7 @@ void FusedConvBNNode::fillBuffer(TensorBuf* tBuf, int buftype, long long int siz
     if(nname_.find("bn3") == nname_.npos)
       value = 1;
     else
-      value = 1.;
+      value = 0.;
   }
   else
     value = 0.;
@@ -644,14 +667,14 @@ void FusedConvBNNode::forwardPropagate()
   impl->set_node_name(nname_);
   impl->set_scratch_buffer(tenScratchData_);
 
-  FusedConvBNNode *pnn = (FusedConvBNNode*)tenBot_->getOwner();
+  FusedConvBNNode *pnn = (FusedConvBNNode*)tenBot_[0]->getOwner();
   TensorBuf *pgammab = pnn->getScaleBuf();
   TensorBuf *pbetab = pnn->getShiftBuf();
 
   if(first_fp)
   {
-    float* ptr = (float*)tenTopData_->getBuffer();
-    int size = tenTopData_->getBufferSize()/sizeof(float);
+    float* ptr = (float*)tenTopData_[0]->getBuffer();
+    int size = tenTopData_[0]->getBufferSize()/sizeof(float);
 
 #ifdef _OPENMP
 #pragma omp parallel for
@@ -689,7 +712,7 @@ void FusedConvBNNode::forwardPropagate()
   impl->forwardPropagate(tenBotData_, tenWeightData_, pgammab, pbetab, tenScaleData_, tenShiftData_, tenMeanData_, tenRstdevData_, tenTopData_);
 
 #ifdef CHECK_BLOWUP_FP32
-  float *cbptr = (float*)tenTopData_->getBuffer();
+  float *cbptr = (float*)tenTopData_[0]->getBuffer();
   for(int i=0; i<16; i++)
   {
     if(isnan(cbptr[i]) || isinf(cbptr[i]))
@@ -710,16 +733,23 @@ void FusedConvBNNode::forwardPropagate()
 
     if(eptr_->get_current_batch() % STATFREQ == 0)
     {
-      string s = nname_ + "_Inp";
-      ptr = (float*)tenBotData_->getBuffer();
-      pptr = (float*)tenBotData_->getPrivBuffer();
+      string s = nname_ + "_Inp0";
+      ptr = (float*)tenBotData_[0]->getBuffer();
+      pptr = (float*)tenBotData_[0]->getPrivBuffer();
       p = (pptr == NULL) ? ptr : pptr;
       MeanOfLayer((char*)s.c_str(), p, nImg*ifm*ifhp*ifwp);
+
+      if(gparams_.eltwise)
+      {
+        string s = nname_ + "_Inp1";
+        ptr = (float*)tenBotData_[1]->getBuffer();
+        MeanOfLayer((char*)s.c_str(), ptr, nImg*ifm*ifhp*ifwp);
+      }
 
       if(gparams_.bn_fwd || gparams_.bn_relu_fwd)
       {
         string s = nname_ + "_savedInp";
-        ptr = (float*)tenBotData_->getBuffer();
+        ptr = (float*)tenBotData_[0]->getBuffer();
         p = ptr + 2*nImg*ifm + 2*ifm + nImg*ifm*ifhp*ifwp;
         MeanOfLayer((char*)s.c_str(), p, nImg*ifm*ifhp*ifwp);
       }
@@ -730,11 +760,18 @@ void FusedConvBNNode::forwardPropagate()
       p = (pptr == NULL) ? ptr : pptr;
       MeanOfLayer((char*)s.c_str(), p, ifm*ofm*kh*kw);
 
-      s = nname_ + "_Outp";
-      ptr = (float*)tenTopData_->getBuffer();
-      pptr = (float*)tenTopData_->getPrivBuffer();
+      s = nname_ + "_Outp0";
+      ptr = (float*)tenTopData_[0]->getBuffer();
+      pptr = (float*)tenTopData_[0]->getPrivBuffer();
       p = (pptr == NULL) ? ptr : pptr;
       MeanOfLayer((char*)s.c_str(), p, nImg*ofm*ofhp*ofwp);
+
+      if(gparams_.split)
+      {
+        string s = nname_ + "_Outp1";
+        ptr = (float*)tenTopData_[1]->getBuffer();
+        MeanOfLayer((char*)s.c_str(), ptr, nImg*ifm*ifhp*ifwp);
+      }
 
       s = nname_ + "_sump";
       int offset = nImg*ofm*ofhp*ofwp;
@@ -747,7 +784,7 @@ void FusedConvBNNode::forwardPropagate()
       if(gparams_.bn_fwd || gparams_.bn_relu_fwd)
       {
         s = nname_ + "_expect";
-        ptr = (float*)tenBotData_->getBuffer();
+        ptr = (float*)tenBotData_[0]->getBuffer();
         p = ptr + nImg*ifm*ifhp*ifwp + 2*nImg*ifm;
         MeanOfLayer((char*)s.c_str(), p, ifm);
 
@@ -763,11 +800,11 @@ void FusedConvBNNode::forwardPropagate()
         ptr = (float*)tenRstdevData_->getBuffer();
         MeanOfLayer((char*)s.c_str(), ptr, ifm);
 
-        s = nname_ + "_gammap";
+        s = nname_ + "_prev_gammap";
         float* gamma = (float*)pgammab->getBuffer();
         MeanOfLayer((char*)s.c_str(), gamma, ifm);
 
-        s = nname_ + "_betap";
+        s = nname_ + "_prev_betap";
         float* beta = (float*)pbetab->getBuffer();
         MeanOfLayer((char*)s.c_str(), beta, ifm);
       }
@@ -800,13 +837,15 @@ void FusedConvBNNode::backPropagate()
   printf("Weights: %d x %d x %d x %d\n", ofm, ifm, kh, kw);
 #endif
 
-  tenTopDiff_ = tenTop_->getBuf(DIFF);
+  tenTopDiff_.resize(top_.size());
+  for(int i=0; i<top_.size(); i++)
+    tenTopDiff_[i] = tenTop_[i]->getBuf(DIFF);
 
   if(first_bp)
   {
     long long int size = nImg * ifm * ifhp *ifwp;
 
-    float* ptr = (float*)tenBotDiff_->getBuffer();
+    float* ptr = (float*)tenBotDiff_[0]->getBuffer();
 #ifdef _OPENMP
 #pragma omp parallel for
 #endif
@@ -830,10 +869,10 @@ void FusedConvBNNode::backPropagate()
     first_bp = false;
   }
 
-  impl->backPropagate(tenTopData_, tenTopDiff_, tenWeightData_, tenScaleData_, tenScaleDiff_, tenShiftDiff_, tenBotDiff_);
+  impl->backPropagate(tenTopData_[0], tenTopDiff_, tenWeightData_, tenScaleData_, tenScaleDiff_, tenShiftDiff_, tenBotDiff_);
 
 #ifdef CHECK_BLOWUP_FP32
-  float* cbptr = (float*)tenTopDiff_->getBuffer();
+  float* cbptr = (float*)tenTopDiff_[0]->getBuffer();
   for(int i=0; i<16; i++)
   {
     if(isnan(cbptr[i]) || isinf(cbptr[i]))
@@ -853,13 +892,18 @@ void FusedConvBNNode::backPropagate()
   {
     if(eptr_->get_current_batch() % STATFREQ == 0)// && gparams_.ipad_h)
     {
-      string s = nname_ + "_delOutp";
-
-      ptr = (float*)tenTopDiff_->getBuffer();
-      pptr = (float*)tenTopDiff_->getPrivBuffer();
+      string s = nname_ + "_delOutp0";
+      ptr = (float*)tenTopDiff_[0]->getBuffer();
+      pptr = (float*)tenTopDiff_[0]->getPrivBuffer();
       p = (pptr == NULL) ? ptr : pptr;
-      printf("FusedConvBN deloutp %p\n",p);
       MeanOfLayer((char*)s.c_str(), p, nImg*ofm*ofhp*ofwp);
+
+      if(gparams_.split)
+      {
+        string s = nname_ + "_delOutp1";
+        ptr = (float*)tenTopDiff_[1]->getBuffer();
+        MeanOfLayer((char*)s.c_str(), ptr, nImg*ifm*ifhp*ifwp);
+      }
 
       s = nname_ + "_Wt";
       ptr = (float*)tenWeightData_->getBuffer();
@@ -878,7 +922,7 @@ void FusedConvBNNode::backPropagate()
         MeanOfLayer((char*)s.c_str(), p, gparams_.nOutput);
 
         s = nname_ + "_bmean2";
-        ptr = (float*)tenBotData_->getBuffer();
+        ptr = (float*)tenBotData_[0]->getBuffer();
         p = ptr + nImg*ifm*ifhp*ifwp + 2*nImg*ifm;
         MeanOfLayer((char*)s.c_str(), p, ifm);
 
@@ -887,21 +931,10 @@ void FusedConvBNNode::backPropagate()
         MeanOfLayer((char*)s.c_str(), p, ifm);
       }
 
-      if(gparams_.own_bstats_bwd || gparams_.own_bstats_relu_bwd)
-      {
-        s = nname_ + "_delgammap";
-        p = (float*)tenScaleDiff_->getBuffer();
-        MeanOfLayer((char*)s.c_str(), p, gparams_.nOutput);
-
-        s = nname_ + "_delbetap";
-        p = (float*)tenShiftDiff_->getBuffer();
-        MeanOfLayer((char*)s.c_str(), p, gparams_.nOutput);
-      }
-
       if(gparams_.bn_bwd)
       {
         s = nname_ + "_bmean";
-        ptr = (float*)tenTopData_->getBuffer();
+        ptr = (float*)tenTopData_[0]->getBuffer();
         p = ptr + nImg*ofm*ofhp*ofwp + 2*nImg*ofm;
         MeanOfLayer((char*)s.c_str(), p, ofm);
 
@@ -910,15 +943,21 @@ void FusedConvBNNode::backPropagate()
         MeanOfLayer((char*)s.c_str(), p, ofm);
       }
 
-      s = nname_ + "_delInp";
-      ptr = (float*)tenBotDiff_->getBuffer();
-      pptr = (float*)tenBotDiff_->getPrivBuffer();
+      s = nname_ + "_delInp0";
+      ptr = (float*)tenBotDiff_[0]->getBuffer();
+      pptr = (float*)tenBotDiff_[0]->getPrivBuffer();
       p = (pptr == NULL) ? ptr : pptr;
       MeanOfLayer((char*)s.c_str(), p, nImg*ifm*ifhp*ifwp);
 
+      if(gparams_.eltwise)
+      {
+        s = nname_ + "_delInp1";
+        ptr = (float*)tenBotDiff_[1]->getBuffer();
+        MeanOfLayer((char*)s.c_str(), ptr, nImg*ifm*ifhp*ifwp);
+      }
 
       s = nname_ + "_savedOutp";
-      ptr = (float*)tenTopData_->getBuffer();
+      ptr = (float*)tenTopData_[0]->getBuffer();
       p = ptr + nImg*ofm*ofhp*ofwp + 2*nImg*ofm + 2*ofm;
       MeanOfLayer((char*)s.c_str(), p, nImg*ofm*ofhp*ofwp);
     }
@@ -971,9 +1010,9 @@ void FusedConvBNNode::weightUpdate()
 }
 #endif
 
-  tenTopDiff_ = tenTop_->getBuf(DIFF);
+  tenTopDiff_[0] = tenTop_[0]->getBuf(DIFF);
 
-  impl->weightUpdate(tenBotData_, tenTopDiff_, tenWeightDiff_);
+  impl->weightUpdate(tenBotData_[0], tenTopDiff_[0], tenWeightDiff_);
 
 #ifdef CHECK_BLOWUP_FP32
   float* cbptr = (float*)tenWeightDiff_->getBuffer();
@@ -1008,15 +1047,15 @@ void FusedConvBNNode::weightUpdate()
 #endif
   {
     string s = nname_ + "_Inp";
-    ptr = (float*)tenBotData_->getBuffer();
-    pptr = (float*)tenBotData_->getPrivBuffer();
+    ptr = (float*)tenBotData_[0]->getBuffer();
+    pptr = (float*)tenBotData_[0]->getPrivBuffer();
     p = (pptr == NULL) ? ptr : pptr;
     MeanOfLayer((char*)s.c_str(), p, nImg*ifm*ifhp*ifwp);
 
     s = nname_ + "_delOutp";
 
-    ptr = (float*)tenTopDiff_->getBuffer();
-    pptr = (float*)tenTopDiff_->getPrivBuffer();
+    ptr = (float*)tenTopDiff_[0]->getBuffer();
+    pptr = (float*)tenTopDiff_[0]->getPrivBuffer();
     p = (pptr == NULL) ? ptr : pptr;
     MeanOfLayer((char*)s.c_str(), p, nImg*ofm*ofhp*ofwp);
 

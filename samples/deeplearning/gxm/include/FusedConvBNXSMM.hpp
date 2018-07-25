@@ -73,12 +73,15 @@ class FusedConvBNXSMM : public FusedConvBNImpl
     libxsmm_dnn_layer* libxsmm_handle = NULL;
     libxsmm_dnn_tensor* libxsmm_input = NULL;
     libxsmm_dnn_tensor* libxsmm_input_st = NULL;
+    libxsmm_dnn_tensor* libxsmm_input_left = NULL;
     libxsmm_dnn_tensor* libxsmm_input_st_bwd = NULL;
     libxsmm_dnn_tensor* libxsmm_input_st_bwd2 = NULL;
     libxsmm_dnn_tensor* libxsmm_output = NULL;
     libxsmm_dnn_tensor* libxsmm_filter = NULL;
     libxsmm_dnn_tensor* libxsmm_delinput = NULL;
+    libxsmm_dnn_tensor* libxsmm_delinput_left = NULL;
     libxsmm_dnn_tensor* libxsmm_deloutput = NULL;
+    libxsmm_dnn_tensor* libxsmm_deloutput_left = NULL;
     libxsmm_dnn_tensor* libxsmm_delfilter = NULL;
     libxsmm_dnn_tensor* libxsmm_expect = NULL;
     libxsmm_dnn_tensor* libxsmm_rstdev = NULL;
@@ -104,8 +107,9 @@ class FusedConvBNXSMM : public FusedConvBNImpl
     bool destroyed_in_=false, destroyed_out_=false, destroyed_din_=false, destroyed_dout_=false;
     bool updated_scratch=false;
     void *in_ptr=NULL, *in_prv_ptr=NULL, *wt_ptr=NULL, *out_ptr=NULL, *out_prv_ptr=NULL;
+    void *in_res_ptr=NULL, *din_res_ptr=NULL, *dout_res_ptr=NULL;
     void *gamma_ptr=NULL, *beta_ptr=NULL, *dgamma_dbeta=NULL, *delgamma_ptr=NULL, *delbeta_ptr=NULL;
-    void *sin_ptr=NULL, *sout_ptr=NULL;
+    void *sin_ptr=NULL, *sout_ptr=NULL, *in_ptr_left=NULL, *din_ptr_left;
     void *din_ptr=NULL, *din_prv_ptr=NULL, *dwt_ptr=NULL, *dwt_prv_ptr=NULL, *dout_ptr=NULL, *dout_prv_ptr=NULL;
     float *expect=NULL, *rstdev=NULL, *bmean1=NULL, *brstd1=NULL, *bmean2=NULL, *brstd2=NULL;
     void *scratch=NULL;
@@ -113,8 +117,8 @@ class FusedConvBNXSMM : public FusedConvBNImpl
   public:
     FusedConvBNXSMM(FusedConvBNImplParams *gp, int engine);
     virtual ~FusedConvBNXSMM(void) {}
-    void forwardPropagate(TensorBuf *inp, TensorBuf* weightp, TensorBuf* gammap, TensorBuf* betap, TensorBuf* mygammap, TensorBuf* mybetap, TensorBuf *gmeanp, TensorBuf *grstdp, TensorBuf *outp, int tid);
-    void backPropagate(TensorBuf* outp, TensorBuf *deloutp, TensorBuf* weightp, TensorBuf *gammap, TensorBuf* delgammap, TensorBuf* delbetap, TensorBuf *delinp, int tid);
+    void forwardPropagate(vector<TensorBuf *>& inp, TensorBuf* weightp, TensorBuf* gammap, TensorBuf* betap, TensorBuf* mygammap, TensorBuf* mybetap, TensorBuf *gmeanp, TensorBuf *grstdp, vector<TensorBuf *>& outp, int tid);
+    void backPropagate(TensorBuf* outp, vector<TensorBuf *>& deloutp, TensorBuf* weightp, TensorBuf *gammap, TensorBuf* delgammap, TensorBuf* delbetap, vector<TensorBuf *>& delinp, int tid);
     void weightUpdate(TensorBuf *inp, TensorBuf *deloutp, TensorBuf *delweightp, int tid);
     void dumpBuffer(TensorBuf *wt, void* temp);
     void reduce_batch_stats(void *bstats_ip, float *bmeanp, float *brstdp, TensorBuf *gmeanpb, TensorBuf *grstdpb, int nFM, int fh, int fw);

@@ -53,11 +53,10 @@ typedef struct {
   int kh, kw, kd;
   int group;
   float eps, mmf;
-  bool use_global_stats, eltwise;
+  bool use_global_stats, eltwise, split;
   bool relu_fwd, relu_bwd, bn_fwd, bn_bwd;
   bool bn_relu_fwd, bstats_fwd, bstats_bwd;
-  bool bstats_relu_bwd, own_bn_fwd;
-  bool own_bstats_bwd, own_bstats_relu_bwd;
+  bool bstats_relu_bwd;
   bool physical_padding;
   int algType;
   int bdims, tdims, wdims;
@@ -70,28 +69,28 @@ class FusedConvBNImpl
   protected:
     FusedConvBNImplParams *gp;
     int engine;
-    TensorLayoutType top_layout_type, gbot_layout_type;
+    TensorLayoutType top_layout_type;
+    TensorLayoutType gbot_layout_type;
     void *top_layout, *gbot_layout;
-    int top_compute_engine=-1;
-    int bot_compute_engine=-1;
+    vector<int> top_compute_engine, bot_compute_engine;
     string nname;
     TensorBuf* scratchp;
 
   public:
     FusedConvBNImpl(FusedConvBNImplParams* gp_, int engine_): gp(gp_), engine(engine_) {}
 
-    void set_top_compute_engine(int e) { top_compute_engine = e;}
-    void set_bot_compute_engine(int e) { bot_compute_engine = e;}
+    void set_top_compute_engine(int e) { top_compute_engine.push_back(e);}
+    void set_bot_compute_engine(int e) { bot_compute_engine.push_back(e);}
     void set_node_name(string s) { nname = s; }
     void set_scratch_buffer(TensorBuf* sb) { scratchp = sb; }
 
-    virtual void forwardPropagate(TensorBuf *inp, TensorBuf *weightp, TensorBuf *gammap, TensorBuf *betap, TensorBuf* mygammap, TensorBuf* mybetap, TensorBuf *gmeanp, TensorBuf *grstdp, TensorBuf *outp, int tid) = 0;
-    virtual void backPropagate(TensorBuf* outp, TensorBuf* deloutp, TensorBuf* weightp, TensorBuf *gammap, TensorBuf* delgammap, TensorBuf* delbetap, TensorBuf *delinp, int tid) = 0;
+    virtual void forwardPropagate(vector<TensorBuf *>& inp, TensorBuf *weightp, TensorBuf *gammap, TensorBuf *betap, TensorBuf* mygammap, TensorBuf* mybetap, TensorBuf *gmeanp, TensorBuf *grstdp, vector<TensorBuf *>& outp, int tid) = 0;
+    virtual void backPropagate(TensorBuf *outp, vector<TensorBuf*>& deloutp, TensorBuf* weightp, TensorBuf *gammap, TensorBuf* delgammap, TensorBuf* delbetap, vector<TensorBuf *>& delinp, int tid) = 0;
 
     virtual void weightUpdate(TensorBuf *inp, TensorBuf *deloutp, TensorBuf *delweightp, int tid) = 0;
     virtual void dumpBuffer(TensorBuf*, void*) {}
 
-    virtual void forwardPropagate(TensorBuf *inp, TensorBuf* weightp, TensorBuf* gammap, TensorBuf* betap, TensorBuf* mygammap, TensorBuf* mybetap, TensorBuf *gmeanp, TensorBuf *grstdp, TensorBuf *outp)
+    virtual void forwardPropagate(vector<TensorBuf *>& inp, TensorBuf* weightp, TensorBuf* gammap, TensorBuf* betap, TensorBuf* mygammap, TensorBuf* mybetap, TensorBuf *gmeanp, TensorBuf *grstdp, vector<TensorBuf *>& outp)
     {
       switch(engine)
       {
@@ -101,7 +100,7 @@ class FusedConvBNImpl
       }
     }
 
-    virtual void backPropagate(TensorBuf *outp, TensorBuf *deloutp, TensorBuf* weightp, TensorBuf *gammap, TensorBuf* delgammap, TensorBuf* delbetap, TensorBuf *delinp)
+    virtual void backPropagate(TensorBuf *outp, vector<TensorBuf *>& deloutp, TensorBuf* weightp, TensorBuf *gammap, TensorBuf* delgammap, TensorBuf* delbetap, vector<TensorBuf *>& delinp)
     {
       switch(engine)
       {

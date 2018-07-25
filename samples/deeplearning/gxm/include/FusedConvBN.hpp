@@ -137,6 +137,9 @@ class FusedConvBNParams : public NNParams
     void set_eltwise(bool e) { eltwise_ = e; }
     bool get_eltwise() { return eltwise_; }
 
+    void set_split(bool s) { split_ = s; }
+    bool get_split() { return split_; }
+
     void set_relu_fwd(bool relu_fwd) { relu_fwd_ = relu_fwd; }
     bool get_relu_fwd() { return relu_fwd_; }
 
@@ -145,9 +148,6 @@ class FusedConvBNParams : public NNParams
 
     void set_bn_fwd(bool bn_fwd) { bn_fwd_ = bn_fwd; }
     bool get_bn_fwd() { return bn_fwd_; }
-
-    void set_own_bn_fwd(bool s) { own_bn_fwd_ = s; }
-    bool get_own_bn_fwd() { return own_bn_fwd_; }
 
     void set_bn_bwd(bool bn_bwd) { bn_bwd_ = bn_bwd; }
     bool get_bn_bwd() { return bn_bwd_; }
@@ -163,12 +163,6 @@ class FusedConvBNParams : public NNParams
 
     void set_bstats_relu_bwd(bool s) { bstats_relu_bwd_ = s; }
     bool get_bstats_relu_bwd() { return bstats_relu_bwd_; }
-
-    void set_own_bstats_bwd(bool s) { own_bstats_bwd_ = s; }
-    bool get_own_bstats_bwd() { return own_bstats_bwd_; }
-
-    void set_own_bstats_relu_bwd(bool s) { own_bstats_relu_bwd_ = s; }
-    bool get_own_bstats_relu_bwd() { return own_bstats_relu_bwd_; }
 
     void set_physical_padding(bool p) { phys_pad_ = p; }
     bool get_physical_padding() { return phys_pad_; }
@@ -202,8 +196,8 @@ class FusedConvBNParams : public NNParams
     float std_, eps_, mmf_;
     bool relu_fwd_, relu_bwd_, bn_fwd_, bn_bwd_;
     bool bn_relu_fwd_, bstats_fwd_, bstats_bwd_, bstats_relu_bwd_;
-    bool own_bn_fwd_, own_bstats_bwd_, own_bstats_relu_bwd_;
-    bool phys_pad_, use_global_stats_, eltwise_;
+    bool split_, eltwise_;
+    bool phys_pad_, use_global_stats_;
     int group_, compute_engine_, algotype_;
     int variance_norm_, data_type_;
     vector<float> lr_mult_, decay_mult_;
@@ -225,9 +219,11 @@ static MLParams* parseFusedConvBNParams(NodeParameter* np)
   fcbnp->set_node_type(str);
 
   //Set tensor names
-  assert(np->bottom_size() == 1);
-  assert(!np->bottom(0).empty());
-  fcbnp->set_bottom_names(np->bottom(0));
+  for(int i=0; i<np->bottom_size(); i++)
+  {
+    assert(!np->bottom(i).empty());
+    fcbnp->set_bottom_names(np->bottom(i));
+  }
 
   for(int i=0; i<np->top_size(); i++)
   {
@@ -426,14 +422,11 @@ static MLParams* parseFusedConvBNParams(NodeParameter* np)
   fcbnp->set_relu_fwd(pcp.relu_fwd());
   fcbnp->set_relu_bwd(pcp.relu_bwd());
   fcbnp->set_bn_fwd(pcp.bn_fwd());
-  fcbnp->set_own_bn_fwd(pcp.own_bn_fwd());
   fcbnp->set_bn_bwd(pcp.bn_bwd());
   fcbnp->set_bn_relu_fwd(pcp.bn_relu_fwd());
   fcbnp->set_bstats_fwd(pcp.bstats_fwd());
   fcbnp->set_bstats_bwd(pcp.bstats_bwd());
   fcbnp->set_bstats_relu_bwd(pcp.bstats_relu_bwd());
-  fcbnp->set_own_bstats_bwd(pcp.own_bstats_bwd());
-  fcbnp->set_own_bstats_relu_bwd(pcp.own_bstats_relu_bwd());
 
   FillerParameter wp = pcp.weight_filler();
   fcbnp->set_weight_filler_type(wp.type());
@@ -441,6 +434,7 @@ static MLParams* parseFusedConvBNParams(NodeParameter* np)
   fcbnp->set_variance_norm(wp.variance_norm());
 
   fcbnp->set_eltwise(pcp.eltwise());
+  fcbnp->set_split(pcp.split());
 
   fcbnp->set_physical_padding(pcp.physical_padding());
 
@@ -483,12 +477,12 @@ class FusedConvBNNode : public NNNode
         s->dims[i] = 0;
     }
 
-    Tensor *tenTop_, *tenBot_, *tenWeight_, *tenScale_, *tenShift_, *tenMean_, *tenRstdev_;
+    vector<Tensor *> tenTop_, tenBot_;
+    Tensor *tenWeight_, *tenScale_, *tenShift_, *tenMean_, *tenRstdev_;
 
     FusedConvBNImplParams gparams_;
-    TensorBuf *tenBotDiff_, *tenBotData_; // Data & Gradients with respect to input
-    TensorBuf *tenTopData_;
-    TensorBuf *tenTopDiff_; // Output data
+    vector<TensorBuf *> tenBotDiff_, tenBotData_; // Data & Gradients with respect to input
+    vector<TensorBuf *> tenTopData_, tenTopDiff_; 
     TensorBuf *tenWeightDiff_, *tenWeightData_, *tenWeightInc_; // Weight gradients, data, increments
     TensorBuf *tenScaleData_, *tenScaleDiff_, *tenScaleInc_; // Gamma data, gradients, increments
     TensorBuf *tenShiftData_, *tenShiftDiff_, *tenShiftInc_; // Beta data, gradients, increments

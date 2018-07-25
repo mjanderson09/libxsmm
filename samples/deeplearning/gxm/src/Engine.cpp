@@ -835,6 +835,9 @@ void* MLEngine::allocate_memory(string tenType, TensorList L, int buftype, vecto
     string nntype = dynamic_cast<NNNode*>(t->getOwner())->getNodeType();
     if(nntype.find("Split") != nntype.npos && buftype == DATA)
       continue;
+    string tname = t->getTensorName();
+    if(tname.find("res") != tname.npos && buftype == DATA)
+      continue;
 
     // Scrub or initialize buffers appropriately
     //

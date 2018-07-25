@@ -93,6 +93,13 @@ FusedConvBNXSMM::FusedConvBNXSMM(FusedConvBNImplParams* gp, int engine) : FusedC
     my_fuse_ops |= (int)LIBXSMM_DNN_CONV_FUSE_BATCH_NORM_RELU_FWD;
   if(gp->bstats_relu_bwd)
     my_fuse_ops |= (int)LIBXSMM_DNN_CONV_FUSE_BATCH_STATS_RELU_BWD;
+  if(gp->eltwise)
+  {
+    my_fuse_ops |= (int)LIBXSMM_DNN_CONV_FUSE_ELEMENTWISE_FWD;
+    my_fuse_ops |= (int)LIBXSMM_DNN_CONV_FUSE_ELEMENTWISE_BWD;
+  }
+  if(gp->split)
+    my_fuse_ops |= (int)LIBXSMM_DNN_CONV_FUSE_SPLIT_BWD;
 
   conv_desc.fuse_ops = (libxsmm_dnn_conv_fuse_op)my_fuse_ops;
 
@@ -212,23 +219,33 @@ void FusedConvBNXSMM::reduce_batch_stats(void *bstats_ip, float *bmeanp, float *
 #endif
 }
 
-void FusedConvBNXSMM::forwardPropagate(TensorBuf *inp, TensorBuf *weightp, TensorBuf *gammap, TensorBuf *betap, TensorBuf* my_gammap, TensorBuf* my_betap, TensorBuf *gmeanp, TensorBuf *grstdp, TensorBuf *outp, int tid)
+void FusedConvBNXSMM::forwardPropagate(vector<TensorBuf *>& inp, TensorBuf *weightp, TensorBuf *gammap, TensorBuf *betap, TensorBuf* my_gammap, TensorBuf* my_betap, TensorBuf *gmeanp, TensorBuf *grstdp, vector<TensorBuf *>& outp, int tid)
 {
 #ifdef TIMING_OV
   struct timeval tvs, tve;
 
   gettimeofday(&tvs, NULL);
 #endif
-  assert(bot_compute_engine != -1);
-  assert(top_compute_engine != -1);
+  assert(bot_compute_engine[0] != -1);
+  assert(top_compute_engine[0] != -1);
 
   // Conv input
-  in_ptr = inp->getBuffer();
-  in_prv_ptr = inp->getPrivBuffer();
+  in_ptr = inp[0]->getBuffer();
+  in_prv_ptr = inp[0]->getPrivBuffer();
+
+  if(gp->eltwise)
+    in_res_ptr = inp[1]->getBuffer();
 
   // Conv output
-  out_ptr = outp->getBuffer();
-  out_prv_ptr = outp->getPrivBuffer();
+  out_ptr = outp[0]->getBuffer();
+  out_prv_ptr = outp[0]->getPrivBuffer();
+
+  if(gp->split)
+  {
+    outp[1]->setBuffer(in_ptr);
+    int res_size = conv_desc.N * conv_desc.C * (gp->iHeight + 2*gp->ipad_h) * (gp->iWidth + 2*gp->ipad_w);
+    outp[1]->setBufferSize(res_size);
+  }
 
   // Conv Weight
   wt_ptr = weightp->getBuffer();
@@ -262,16 +279,16 @@ memset(out_stats_ptr, 0, 2*conv_desc.N * conv_desc.K * sizeof(float));
 
   void *scratch = scratchp->getBuffer();
 
-  if(libxsmm_input == NULL && libxsmm_filter == NULL && libxsmm_output == NULL && libxsmm_input_st == NULL && libxsmm_gamma == NULL && libxsmm_beta == NULL && libxsmm_expect == NULL && libxsmm_rstdev == NULL)
+  if(libxsmm_input == NULL && libxsmm_input_left == NULL && libxsmm_filter == NULL && libxsmm_output == NULL && libxsmm_input_st == NULL && libxsmm_gamma == NULL && libxsmm_beta == NULL && libxsmm_expect == NULL && libxsmm_rstdev == NULL)
   {
-    if(bot_compute_engine != engine)
+    if(bot_compute_engine[0] != engine)
     {
       if(in_prv_ptr == NULL)
       {
         int size = gp->batch_size * gp->nInput * (gp->iHeight + 2*gp->ipad_h) * (gp->iWidth + 2*gp->ipad_w);
         in_prv_ptr = (void*)libxsmm_aligned_malloc(size*sizeof(float), 2097152);
 
-        inp->setPrivBuffer(in_prv_ptr);
+        inp[0]->setPrivBuffer(in_prv_ptr);
       }
 
       /* setup LIBXSMM buffers and filter */
@@ -287,12 +304,22 @@ memset(out_stats_ptr, 0, 2*conv_desc.N * conv_desc.K * sizeof(float));
       libxsmm_input = libxsmm_dnn_link_tensor( in_buffer_layout, in_ptr, &status );
       CHKERR_LIBXSMM_DNN( status );
     }
-
     // Bind input buffer to handle
     CHKERR_LIBXSMM_DNN_BIND("input", libxsmm_dnn_bind_tensor( libxsmm_handle, libxsmm_input, LIBXSMM_DNN_REGULAR_INPUT ) );
 
-    // Assume that weights are in KCRS format
+    // Tensor for Element-wise compute, if any
+    if(gp->eltwise)
+    {
+      libxsmm_layout = libxsmm_dnn_create_tensor_datalayout( libxsmm_handle, LIBXSMM_DNN_REGULAR_INPUT_LEFT, &status);
+      CHKERR_LIBXSMM_DNN( status );
+      libxsmm_input_left = libxsmm_dnn_link_tensor(libxsmm_layout, in_res_ptr, &status);
+      CHKERR_LIBXSMM_DNN( status );
+      libxsmm_dnn_destroy_tensor_datalayout( libxsmm_layout );
 
+      CHKERR_LIBXSMM_DNN_BIND("input_res", libxsmm_dnn_bind_tensor( libxsmm_handle, libxsmm_input_left, LIBXSMM_DNN_REGULAR_INPUT_LEFT ) );
+    }
+
+    // Assume that weights are in KCRS format
     libxsmm_layout = libxsmm_dnn_create_tensor_datalayout( libxsmm_handle, LIBXSMM_DNN_REGULAR_FILTER, &status );
     CHKERR_LIBXSMM_DNN( status );
 
@@ -350,14 +377,14 @@ memset(out_stats_ptr, 0, 2*conv_desc.N * conv_desc.K * sizeof(float));
     }
 
     // Conv Output
-    if(top_compute_engine != engine)
+    if(top_compute_engine[0] != engine)
     {
       if(out_prv_ptr == NULL)
       {
 
         int size = gp->batch_size * gp->nOutput * (gp->oHeight + 2*conv_desc.pad_h_out) * (gp->oWidth + 2*conv_desc.pad_w_out);
         out_prv_ptr = (void*)libxsmm_aligned_malloc(size*sizeof(float), 2097152);
-        outp->setPrivBuffer(out_prv_ptr);
+        outp[0]->setPrivBuffer(out_prv_ptr);
       }
 
       out_buffer_layout = libxsmm_dnn_create_tensor_datalayout( libxsmm_handle, LIBXSMM_DNN_REGULAR_OUTPUT, &status );
@@ -437,7 +464,7 @@ memset(out_stats_ptr, 0, 2*conv_desc.N * conv_desc.K * sizeof(float));
     updated_scratch = true;
   }
 
-  if(bot_compute_engine != engine)
+  if(bot_compute_engine[0] != engine)
   {
     assert(gp->in_data_type == DT_FLOAT);
     assert(in_buffer_layout->num_dims == 5);
@@ -538,78 +565,6 @@ memset(out_stats_ptr, 0, 2*conv_desc.N * conv_desc.K * sizeof(float));
       CHKERR_LIBXSMM_DNN( libxsmm_dnn_execute_st( libxsmm_handle, LIBXSMM_DNN_COMPUTE_KIND_FWD, 0, tid ) );
     }
 
-    if(gp->own_bn_fwd)
-    {
-      int nImg = conv_desc.N;
-      int nBfm = conv_desc.K/VLEN;
-      int nFM = conv_desc.K;
-      int fh = gp->oHeight;
-      int fw = gp->oWidth;
-      int ph = gp->pad_h;
-      int pw = gp->pad_w;
-      int sh = gp->stride_h;
-      int sw = gp->stride_w;
-      int iph = gp->ipad_h;
-      int ipw = gp->ipad_w;
-
-      bmean1 = (float*)(out_stats_ptr + 2 * conv_desc.N * conv_desc.K * sizeof(float));
-      brstd1 = bmean1 + conv_desc.K;
-      reduce_batch_stats(out_stats_ptr, bmean1, brstd1, gmeanp, grstdp, conv_desc.K, fh, fw);
-
-      float *my_gamma_ptr = (float*)my_gammap->getBuffer();
-      float *my_beta_ptr = (float*)my_betap->getBuffer();
-      float (* __restrict output)[nBfm][fh][fw][VLEN]  = (float (*)[*][*][*][VLEN])out_ptr;
-      float (* __restrict bmean)[VLEN]                   = (float (*)[VLEN])bmean1;
-      float (* __restrict brstd)[VLEN]                   = (float (*)[VLEN])brstd1;
-      float (* __restrict gamma)[VLEN]                   = (float (*)[VLEN])my_gamma_ptr;
-      float (* __restrict beta)[VLEN]                   = (float (*)[VLEN])my_beta_ptr;
-
-      sout_ptr = (void*)(brstd1 + conv_desc.K);
-      float (* __restrict input_r)[nBfm][fh][fw][VLEN]  = (float (*)[*][*][*][VLEN])sout_ptr;
-
-#ifdef _OPENMP
-#pragma omp parallel for
-#endif
-      for(int img=0; img < nImg; img++) {
-        for(int fm=0; fm < nBfm; fm++) {
-          for(int h=0; h < fh; h++) {
-            for(int w=0; w < fw; w++) {
-#pragma omp simd
-#pragma vector aligned
-#ifdef USE_NTS_BN
-#pragma vector nontemporal
-#endif
-              for(int v=0; v<16; v++) {
-                input_r[img][fm][h][w][v] = output[img][fm][h][w][v];
-              }
-            }
-          }
-        }
-      }
-      //memcpy(sout_ptr, out_ptr, nImg*nFM*fh*fw*sizeof(float));
-
-#ifdef _OPENMP
-#pragma omp parallel for
-#endif
-      for(int img=0; img < nImg; img++) {
-        for(int fm=0; fm < nBfm; fm++) {
-          for(int h=0; h < fh; h++) {
-            for(int w=0; w < fw; w++) {
-#pragma omp simd
-#pragma vector aligned
-#ifdef USE_NTS_BN
-#pragma vector nontemporal
-#endif
-              for(int v=0; v<16; v++) {
-                // BN + scale (gamma, beta)
-                output[img][fm][h][w][v] = gamma[fm][v]*(input_r[img][fm][h][w][v] - bmean[fm][v]) * brstd[fm][v] + beta[fm][v];
-              }
-            }
-          }
-        }
-      }
-    }
-
 #ifdef USE_XSMM_TIMING
   gettimeofday(&tvec, NULL);
   double fp_time = (tvec.tv_sec + tvec.tv_usec*1e-6) - (tvsc.tv_sec + tvsc.tv_usec*1e-6);
@@ -634,7 +589,7 @@ memset(out_stats_ptr, 0, 2*conv_desc.N * conv_desc.K * sizeof(float));
   gettimeofday(&tvsp, NULL);
 #endif
 
-  if(top_compute_engine != engine)
+  if(top_compute_engine[0] != engine)
   {
     assert(out_buffer_layout->num_dims == 5);
     assert(out_prv_ptr != NULL);
@@ -666,8 +621,8 @@ memset(out_stats_ptr, 0, 2*conv_desc.N * conv_desc.K * sizeof(float));
       }
     }
     top_layout_type = NCHW;
-    outp->setLayoutType(top_layout_type);
-    outp->setLayout(NULL);
+    outp[0]->setLayoutType(top_layout_type);
+    outp[0]->setLayout(NULL);
   }
   else
   {
@@ -678,8 +633,8 @@ memset(out_stats_ptr, 0, 2*conv_desc.N * conv_desc.K * sizeof(float));
     }
 
     top_layout_type = LIBXSMM_CUSTOM_LAYOUT;
-    outp->setLayoutType(top_layout_type);
-    outp->setLayout(libxsmm_handle);
+    outp[0]->setLayoutType(top_layout_type);
+    outp[0]->setLayout(libxsmm_handle);
   }
 #ifdef TIMING_PO
   gettimeofday(&tvep, NULL);
@@ -731,7 +686,7 @@ void FusedConvBNXSMM::reduce_delgamma_delbeta(float *dgbp, float *dgp, float *db
   }
 }
 
-void FusedConvBNXSMM::backPropagate(TensorBuf *outp, TensorBuf *deloutp, TensorBuf* weightp, TensorBuf *gammap, TensorBuf *delgammap, TensorBuf *delbetap, TensorBuf* delinp, int tid)
+void FusedConvBNXSMM::backPropagate(TensorBuf *outp, vector<TensorBuf *>& deloutp, TensorBuf* weightp, TensorBuf *gammap, TensorBuf *delgammap, TensorBuf *delbetap, vector<TensorBuf*>& delinp, int tid)
 {
 #ifdef TIMING_OV
   struct timeval tvs, tve;
@@ -739,8 +694,8 @@ void FusedConvBNXSMM::backPropagate(TensorBuf *outp, TensorBuf *deloutp, TensorB
   gettimeofday(&tvs, NULL);
 #endif
 
-  assert(bot_compute_engine != -1);
-  assert(top_compute_engine != -1);
+  assert(bot_compute_engine[0] != -1);
+  assert(top_compute_engine[0] != -1);
 
   int nImg = conv_desc.N;
   int nBfm = conv_desc.K/VLEN;
@@ -779,164 +734,20 @@ memset(dgamma_dbeta, 0, 2*conv_desc.N * conv_desc.C*sizeof(float));
     reduce_delgamma_delbeta(dgb_ptr, (float*)delgamma_ptr, (float*)delbeta_ptr, conv_desc.K);
   }
 
-  if(gp->own_bstats_relu_bwd)
-  {
-    int nImg = conv_desc.N;
-    int nBfm = conv_desc.K/VLEN;
-    int nFM = conv_desc.K;
-    int fh = gp->oHeight;
-    int fw = gp->oWidth;
-    int ph = gp->pad_h;
-    int pw = gp->pad_w;
-    int sh = gp->stride_h;
-    int sw = gp->stride_w;
-    int iph = gp->ipad_h;
-    int ipw = gp->ipad_w;
-
-    void *deloutptr = deloutp->getBuffer();
-    float *dgb_ptr = (float*)(sout_ptr + offset*sizeof(float));
-    float *del_gamma_imgp = dgb_ptr;
-    float *del_beta_imgp = del_gamma_imgp + conv_desc.N * conv_desc.K;
-    float (* __restrict del_gamma_img)[nImg][VLEN] = (float (*)[nImg][VLEN])del_gamma_imgp;
-    float (* __restrict del_beta_img)[nImg][VLEN] = (float (*)[nImg][VLEN])del_beta_imgp;
-    float (* __restrict del_output)[nBfm][fh][fw][VLEN]  = (float (*)[*][*][*][VLEN])deloutptr;
-    float (* __restrict bmean)[VLEN]                       = (float (*)[VLEN])bmean1;
-    float (* __restrict brstd)[VLEN]                       = (float (*)[VLEN])brstd1;
-    float (* __restrict input_r)[nBfm][fh][fw][VLEN]     = (float (*)[*][*][*][VLEN])sout_ptr;
-    float (* __restrict gamma)[VLEN]                       = (float (*)[VLEN])gamma_ptr;
-#if 1
-#ifdef _OPENMP
-#pragma omp parallel
-#endif
-#endif
-    {
-#if 1
-#pragma omp for
-#pragma vector aligned
-#endif
-      for(int img=0; img < nImg; img++) {
-        for(int fm=0; fm < nBfm; fm++) {
-          float lcl_gamma[VLEN];
-          float lcl_beta[VLEN];
-#if 1
-#pragma omp simd
-#pragma vector aligned
-#endif
-          for(int v=0; v < VLEN; v++) {
-            lcl_gamma[v] = 0.0f;
-            lcl_beta[v] = 0.0f;
-          }
-          for(int h=0; h < fh; h++) {
-            for(int w=0; w < fw; w++) {
-#if 1
-#pragma omp simd
-#pragma vector aligned
-#endif
-              for(int v=0; v < VLEN; v++) {
-                del_output[img][fm][h][w][v] = input_r[img][fm][h][w][v] > 0.f ? del_output[img][fm][h][w][v] : 0.f;
-                lcl_gamma[v] += (input_r[img][fm][h][w][v] - bmean[fm][v]) * del_output[img][fm][h][w][v] * brstd[fm][v];
-                lcl_beta[v] += del_output[img][fm][h][w][v];
-              }
-            }
-          }
-#if 1
-#pragma omp simd
-#pragma vector aligned
-#ifdef USE_NTS_BN
-#pragma vector nontemporal
-#endif
-#endif
-          for(int v=0; v < VLEN; v++) {
-            del_gamma_img[fm][img][v] = lcl_gamma[v];
-            del_beta_img[fm][img][v]  = lcl_beta[v];
-          }
-        }
-      }
-    }
-  }
-  else if(gp->own_bstats_bwd)
-  {
-    int nImg = conv_desc.N;
-    int nBfm = conv_desc.K/VLEN;
-    int nFM = conv_desc.K;
-    int fh = gp->oHeight;
-    int fw = gp->oWidth;
-    int ph = gp->pad_h;
-    int pw = gp->pad_w;
-    int sh = gp->stride_h;
-    int sw = gp->stride_w;
-    int iph = gp->ipad_h;
-    int ipw = gp->ipad_w;
-
-    void *deloutptr = deloutp->getBuffer();
-    float *dgb_ptr = (float*)(sout_ptr + offset*sizeof(float));
-    float *del_gamma_imgp = dgb_ptr;
-    float *del_beta_imgp = del_gamma_imgp + conv_desc.N * conv_desc.K;
-    float (* __restrict del_gamma_img)[nImg][VLEN] = (float (*)[nImg][VLEN])del_gamma_imgp;
-    float (* __restrict del_beta_img)[nImg][VLEN] = (float (*)[nImg][VLEN])del_beta_imgp;
-    float (* __restrict del_output)[nBfm][fh][fw][VLEN]  = (float (*)[*][*][*][VLEN])deloutptr;
-    float (* __restrict bmean)[VLEN]                       = (float (*)[VLEN])bmean1;
-    float (* __restrict brstd)[VLEN]                       = (float (*)[VLEN])brstd1;
-    float (* __restrict input_r)[nBfm][fh][fw][VLEN]     = (float (*)[*][*][*][VLEN])sout_ptr;
-    float (* __restrict gamma)[VLEN]                       = (float (*)[VLEN])gamma_ptr;
-#if 1
-#ifdef _OPENMP
-#pragma omp parallel
-#endif
-#endif
-    {
-#if 1
-#pragma omp for
-#pragma vector aligned
-#endif
-      for(int img=0; img < nImg; img++) {
-        for(int fm=0; fm < nBfm; fm++) {
-          float lcl_gamma[VLEN];
-          float lcl_beta[VLEN];
-#if 1
-#pragma omp simd
-#pragma vector aligned
-#endif
-          for(int v=0; v < VLEN; v++) {
-            lcl_gamma[v] = 0.0f;
-            lcl_beta[v] = 0.0f;
-          }
-          for(int h=0; h < fh; h++) {
-            for(int w=0; w < fw; w++) {
-#if 1
-#pragma omp simd
-#pragma vector aligned
-#endif
-              for(int v=0; v < VLEN; v++) {
-                lcl_gamma[v] += (input_r[img][fm][h][w][v] - bmean[fm][v]) * del_output[img][fm][h][w][v] * brstd[fm][v];
-                lcl_beta[v] += del_output[img][fm][h][w][v];
-              }
-
-            }
-          }
-#if 1
-#pragma omp simd
-#pragma vector aligned
-#ifdef USE_NTS_BN
-#pragma vector nontemporal
-#endif
-#endif
-          for(int v=0; v < VLEN; v++) {
-            del_gamma_img[fm][img][v] = lcl_gamma[v];
-            del_beta_img[fm][img][v]  = lcl_beta[v];
-          }
-        }
-      }
-    }
-  }
-
   // deloutput
-  dout_ptr = deloutp->getBuffer();
-  dout_prv_ptr = deloutp->getPrivBuffer();
+  dout_ptr = deloutp[0]->getBuffer();
+  dout_prv_ptr = deloutp[0]->getPrivBuffer();
+
+  if(gp->split)
+    dout_res_ptr = deloutp[1]->getBuffer();
 
   //delinput
-  din_ptr = delinp->getBuffer();
-  din_prv_ptr = delinp->getPrivBuffer();
+  din_ptr = delinp[0]->getBuffer();
+  din_prv_ptr = delinp[0]->getPrivBuffer();
+
+  if(gp->eltwise)
+    din_res_ptr = delinp[1]->getBuffer();
+
   dout_converted_in_BP = false;
 
   if(scratch != scratchp->getBuffer())
@@ -945,20 +756,21 @@ memset(dgamma_dbeta, 0, 2*conv_desc.N * conv_desc.C*sizeof(float));
     CHKERR_LIBXSMM_DNN( libxsmm_dnn_bind_scratch( libxsmm_handle, LIBXSMM_DNN_COMPUTE_KIND_ALL, scratch ) );
   }
 
-  if(libxsmm_delinput == NULL && libxsmm_deloutput == NULL && libxsmm_input_st_bwd == NULL && 
+  if(libxsmm_delinput == NULL && libxsmm_delinput_left == NULL && libxsmm_deloutput == NULL && 
+      libxsmm_deloutput_left == NULL && libxsmm_input_st_bwd == NULL && 
       libxsmm_input_st_bwd2 == NULL && libxsmm_gamma_bwd == NULL && libxsmm_dgamma_dbeta == NULL && 
       libxsmm_delgamma == NULL && libxsmm_delbeta == NULL && libxsmm_bmean1 == NULL && libxsmm_brstd1 == NULL
       && libxsmm_bmean2 == NULL && libxsmm_brstd2 == NULL)
   {
 
     // del Input
-    if(bot_compute_engine != engine)
+    if(bot_compute_engine[0] != engine)
     {
       if(din_prv_ptr == NULL)
       {
         int size = gp->batch_size * gp->nInput * (gp->iHeight + 2*conv_desc.pad_h_in) * (gp->iWidth + 2*conv_desc.pad_w_in);
         din_prv_ptr = (void*)libxsmm_aligned_malloc(size*sizeof(float), 2097152);
-        delinp->setPrivBuffer(din_prv_ptr);
+        delinp[0]->setPrivBuffer(din_prv_ptr);
       }
 
       /* setup LIBXSMM buffers and filter */
@@ -976,14 +788,26 @@ memset(dgamma_dbeta, 0, 2*conv_desc.N * conv_desc.C*sizeof(float));
     }
     CHKERR_LIBXSMM_DNN_BIND( "delin", libxsmm_dnn_bind_tensor( libxsmm_handle, libxsmm_delinput, LIBXSMM_DNN_GRADIENT_INPUT ) );
 
+    // Element-wise BWD
+    if(gp->eltwise)
+    {
+      libxsmm_layout = libxsmm_dnn_create_tensor_datalayout(libxsmm_handle, LIBXSMM_DNN_GRADIENT_INPUT_LEFT, &status);
+      CHKERR_LIBXSMM_DNN(status);
+      libxsmm_delinput_left = libxsmm_dnn_link_tensor(libxsmm_layout, din_res_ptr, &status);
+      CHKERR_LIBXSMM_DNN(status);
+      libxsmm_dnn_destroy_tensor_datalayout( libxsmm_layout );
+
+      CHKERR_LIBXSMM_DNN_BIND("delin_res", libxsmm_dnn_bind_tensor( libxsmm_handle, libxsmm_delinput_left, LIBXSMM_DNN_GRADIENT_INPUT_LEFT));
+    }
+
     // del Output
-    if(top_compute_engine != engine)
+    if(top_compute_engine[0] != engine)
     {
       if(dout_prv_ptr == NULL)
       {
         int size = gp->batch_size * gp->nOutput * (gp->oHeight + 2*conv_desc.pad_h_out) * (gp->oWidth + 2*conv_desc.pad_w_out);
         dout_prv_ptr = (void*)libxsmm_aligned_malloc(size*sizeof(float), 2097152);
-        deloutp->setPrivBuffer(dout_prv_ptr);
+        deloutp[0]->setPrivBuffer(dout_prv_ptr);
       }
 
       dout_buffer_layout = libxsmm_dnn_create_tensor_datalayout( libxsmm_handle, LIBXSMM_DNN_GRADIENT_OUTPUT, &status );
@@ -1002,6 +826,17 @@ memset(dgamma_dbeta, 0, 2*conv_desc.N * conv_desc.C*sizeof(float));
     }
 
     CHKERR_LIBXSMM_DNN_BIND("delout", libxsmm_dnn_bind_tensor( libxsmm_handle, libxsmm_deloutput, LIBXSMM_DNN_GRADIENT_OUTPUT ) );
+
+    if(gp->split)
+    {
+      libxsmm_layout = libxsmm_dnn_create_tensor_datalayout(libxsmm_handle, LIBXSMM_DNN_REGULAR_INPUT_SPLIT, &status);
+      CHKERR_LIBXSMM_DNN(status);
+      libxsmm_deloutput_left = libxsmm_dnn_link_tensor(libxsmm_layout, dout_res_ptr, &status);
+      CHKERR_LIBXSMM_DNN(status);
+      libxsmm_dnn_destroy_tensor_datalayout( libxsmm_layout );
+
+      CHKERR_LIBXSMM_DNN_BIND("delout_res", libxsmm_dnn_bind_tensor( libxsmm_handle, libxsmm_deloutput_left, LIBXSMM_DNN_REGULAR_INPUT_SPLIT ) );
+    }
 
     if(gp->bn_bwd)
     {
@@ -1080,7 +915,7 @@ memset(dgamma_dbeta, 0, 2*conv_desc.N * conv_desc.C*sizeof(float));
     CHKERR_LIBXSMM_DNN_BIND("brstd1", libxsmm_dnn_bind_tensor( libxsmm_handle, libxsmm_brstd1, LIBXSMM_DNN_REGULAR_BRSTD1 ) );
   }
 
-  if(top_compute_engine != engine)
+  if(top_compute_engine[0] != engine)
   {
     assert(dout_prv_ptr != NULL);
 
@@ -1199,7 +1034,7 @@ memset(dgamma_dbeta, 0, 2*conv_desc.N * conv_desc.C*sizeof(float));
   gettimeofday(&tvsp, NULL);
 #endif
 
-  if(bot_compute_engine != engine)
+  if(bot_compute_engine[0] != engine)
   {
     assert(din_buffer_layout->num_dims == 5);
     assert(din_prv_ptr != NULL);
@@ -1230,9 +1065,9 @@ memset(dgamma_dbeta, 0, 2*conv_desc.N * conv_desc.C*sizeof(float));
         }
       }
     }
-    gbot_layout_type = NCHW;
-    delinp->setLayoutType(gbot_layout_type);
-    delinp->setLayout(NULL);
+    gbot_layout_type= NCHW;
+    delinp[0]->setLayoutType(gbot_layout_type);
+    delinp[0]->setLayout(NULL);
   }
   else
   {
@@ -1242,8 +1077,8 @@ memset(dgamma_dbeta, 0, 2*conv_desc.N * conv_desc.C*sizeof(float));
       destroyed_din_ = true;
     }
     gbot_layout_type = LIBXSMM_CUSTOM_LAYOUT;
-    delinp->setLayoutType(gbot_layout_type);
-    delinp->setLayout(libxsmm_handle);
+    delinp[0]->setLayoutType(gbot_layout_type);
+    delinp[0]->setLayout(libxsmm_handle);
   }
 
 #ifdef TIMING_PO
@@ -1289,8 +1124,8 @@ void FusedConvBNXSMM::weightUpdate(TensorBuf *inp, TensorBuf *deloutp, TensorBuf
     CHKERR_LIBXSMM_DNN( libxsmm_dnn_bind_scratch( libxsmm_handle, LIBXSMM_DNN_COMPUTE_KIND_ALL, scratch ) );
   }
 
-  assert(bot_compute_engine != -1);
-  assert(top_compute_engine != -1);
+  assert(bot_compute_engine[0] != -1);
+  assert(top_compute_engine[0] != -1);
 
   if(libxsmm_delfilter == NULL)
   {
@@ -1306,7 +1141,7 @@ void FusedConvBNXSMM::weightUpdate(TensorBuf *inp, TensorBuf *deloutp, TensorBuf
 
   if(libxsmm_deloutput == NULL)
   {
-    if((top_compute_engine != engine) && dout_converted_in_BP == false)
+    if((top_compute_engine[0] != engine) && dout_converted_in_BP == false)
     {
       if(dout_prv_ptr == NULL)
       {
@@ -1331,7 +1166,7 @@ void FusedConvBNXSMM::weightUpdate(TensorBuf *inp, TensorBuf *deloutp, TensorBuf
     CHKERR_LIBXSMM_DNN_BIND("delout", libxsmm_dnn_bind_tensor( libxsmm_handle, libxsmm_deloutput, LIBXSMM_DNN_GRADIENT_OUTPUT ) );
   }
 
-  if(top_compute_engine != engine && dout_converted_in_BP == false)
+  if(top_compute_engine[0] != engine && dout_converted_in_BP == false)
   {
     assert(dout_prv_ptr != NULL);
 
