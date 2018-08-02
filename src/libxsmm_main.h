@@ -302,6 +302,10 @@ LIBXSMM_EXTERN_C typedef struct LIBXSMM_RETARGETABLE segment_t {
   int segment_type;
   int n_convs;
   int aux_index;
+  int aux_index0;
+  int aux_index1;
+  int aux_index2;
+  int aux_index3;
 } segment_t;
 
 LIBXSMM_EXTERN_C struct LIBXSMM_RETARGETABLE libxsmm_dnn_layer {

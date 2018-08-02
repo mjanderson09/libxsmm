@@ -44,6 +44,16 @@
 #define CHWK 3
 #define HWCK 4
 
+int INTERLEAVE_IFM_BN = 1;
+if(handle->desc.R != 1 || handle->desc.S != 1) 
+{
+  INTERLEAVE_IFM_BN = 0;
+}
+
+if(handle->desc.H <= 14 && handle->desc.W <= 14)
+{
+  INTERLEAVE_IFM_BN = 0;
+}
 
 const char * get_segment_type(int segment_type)
 {
@@ -180,7 +190,7 @@ for (ltid = 0; ltid < handle->desc.threads; ltid++)
                       local_entries += LOCAL_ENTRIES_PER_CONV;
 
                       if (mark_ifm_init == 1) {
-		        if(ofmb == my_ofm_start && ojb == 0 && ofm1 == ofmb && oj == ojb && oi == 0) 
+		        if((INTERLEAVE_IFM_BN == 1 && ofmb == my_ofm_start && ofm1 == ofmb) || (ofmb == my_ofm_start && ojb == 0 && ofm1 == ofmb && oj == ojb && oi == 0))
 			{
                           n_code_segments++;
 			}
@@ -223,7 +233,7 @@ for (ltid = 0; ltid < handle->desc.threads; ltid++)
                     for (ifm1 = ifmb; ifm1 < LIBXSMM_MIN(ifmb+handle->block_fwd_ifm, BLOCKSIFM); ifm1 += BLOCKSIFM_BLOCKING) {
                       local_entries += LOCAL_ENTRIES_PER_CONV;
                       if (mark_ifm_init == 1) {
-		        if (ofmb == my_ofm_start && ojb == 0 && ofm1 == ofmb && oj == ojb && oi == 0) {
+		        if ((INTERLEAVE_IFM_BN == 1 && ofmb == my_ofm_start && ofm1 == ofmb) || (ofmb == my_ofm_start && ojb == 0 && ofm1 == ofmb && oj == ojb && oi == 0)) {
                           n_code_segments++;
 			}
                       }
@@ -277,7 +287,7 @@ for (ltid = 0; ltid < handle->desc.threads; ltid++)
                     local_entries += LOCAL_ENTRIES_PER_CONV;
 
                     if (mark_ifm_init == 1) {
-	              if(ofmb == my_ofm_start && ojb == 0 && oj == ojb && oi == 0 && ofm1 == ofmb)
+	              if((INTERLEAVE_IFM_BN == 1 && ofmb == my_ofm_start && ofm1 == ofmb) || (ofmb == my_ofm_start && ojb == 0 && oj == ojb && oi == 0 && ofm1 == ofmb))
 		      {
                         n_code_segments++;
 		      }
@@ -381,7 +391,7 @@ for (ltid = 0; ltid < handle->desc.threads; ltid++)
 		      int ifm_init_marked = (mark_ifm_init == 1) && (ofmb == my_ofm_start && ofm1 == ofmb);
 		      if(mark_ifm_init == 1)
 		      {
-		        if(ofmb == my_ofm_start && ojb == 0 && ofm1 == ofmb && oj == ojb && oi == 0) {
+		        if((INTERLEAVE_IFM_BN == 1 && ofmb == my_ofm_start && ofm1 == ofmb) || (ofmb == my_ofm_start && ojb == 0 && ofm1 == ofmb && oj == ojb && oi == 0)) {
                           tmp_expanded_stream[tmp_stream_index] = IFM_LOOP_FIRST_TOUCH;
                           dbg_expanded_stream[tmp_stream_index].segment_type = IFM_LOOP_FIRST_TOUCH;
                           dbg_expanded_stream[tmp_stream_index].loop_order= MIXED;
@@ -534,8 +544,7 @@ for (ltid = 0; ltid < handle->desc.threads; ltid++)
 		      int ifm_init_marked = (mark_ifm_init == 1) && (ofmb == my_ofm_start && ofm1 == ofmb);
 		      if(mark_ifm_init == 1)
 		      {
-		        if(ofmb == my_ofm_start && ojb == 0 && ofm1 == ofmb && oj == ojb && oi == 0)
-			{
+		        if((INTERLEAVE_IFM_BN == 1 && ofmb == my_ofm_start && ofm1 == ofmb) || (ofmb == my_ofm_start && ojb == 0 && ofm1 == ofmb && oj == ojb && oi == 0)) {
                           tmp_expanded_stream[tmp_stream_index] = IFM_LOOP_FIRST_TOUCH;
                           dbg_expanded_stream[tmp_stream_index].segment_type = IFM_LOOP_FIRST_TOUCH;
                           dbg_expanded_stream[tmp_stream_index].loop_order= MIXED;
@@ -700,8 +709,7 @@ for (ltid = 0; ltid < handle->desc.threads; ltid++)
 		    int ifm_init_marked = (mark_ifm_init == 1) && (ofmb == my_ofm_start && ofm1 == ofmb);
 		    if(mark_ifm_init == 1)
 		    {
-		      if(ofmb == my_ofm_start && ojb == 0 && oj == ojb && oi == 0 && ofm1 == ofmb)
-		      {
+		      if((INTERLEAVE_IFM_BN == 1 && ofmb == my_ofm_start && ofm1 == ofmb) || (ofmb == my_ofm_start && ojb == 0 && oj == ojb && oi == 0 && ofm1 == ofmb)) {
                         tmp_expanded_stream[tmp_stream_index] = IFM_LOOP_FIRST_TOUCH;
                         dbg_expanded_stream[tmp_stream_index].segment_type = IFM_LOOP_FIRST_TOUCH;
                         dbg_expanded_stream[tmp_stream_index].loop_order= HWKC;
@@ -891,8 +899,19 @@ for (ltid = 0; ltid < handle->desc.threads; ltid++)
                         ii = oi * handle->desc.v;
 
                         if (mark_ifm_init == 1) {
-			  if(ofmb == my_ofm_start && ojb == 0 && ofm1 == ofmb && oj == ojb && oi == 0) {
+			  if((INTERLEAVE_IFM_BN == 1 && ofmb == my_ofm_start && ofm1 == ofmb) || (ofmb == my_ofm_start && ojb == 0 && ofm1 == ofmb && oj == ojb && oi == 0)) {
                             encoded_code_segments[encoded_stream_index].aux_index = ifm1;
+if(INTERLEAVE_IFM_BN) {
+                            encoded_code_segments[encoded_stream_index].aux_index0 = ij;
+                            encoded_code_segments[encoded_stream_index].aux_index1 = ii;
+                            encoded_code_segments[encoded_stream_index].aux_index2 = ij + handle->fwd_ofh_rb * handle->desc.u;
+                            encoded_code_segments[encoded_stream_index].aux_index3 = ii + handle->fwd_ofw_rb * handle->desc.v;
+} else {
+                            encoded_code_segments[encoded_stream_index].aux_index0 = 0;
+                            encoded_code_segments[encoded_stream_index].aux_index1 = 0;
+                            encoded_code_segments[encoded_stream_index].aux_index2 = handle->desc.H;
+                            encoded_code_segments[encoded_stream_index].aux_index3 = handle->desc.W;
+}
                             encoded_stream_index++; // Assume BLOCKSIFM 
 		          }
 		        }
@@ -935,15 +954,26 @@ for (ltid = 0; ltid < handle->desc.threads; ltid++)
                   for (oi = 0; oi < handle->ofw; oi += handle->fwd_ofw_rb) {
                     for (ifmb = 0; ifmb < BLOCKSIFM; ifmb += handle->block_fwd_ifm) {
                       for (ifm1 = ifmb; ifm1 < LIBXSMM_MIN(ifmb+handle->block_fwd_ifm, BLOCKSIFM); ifm1 += BLOCKSIFM_BLOCKING) {
+                        ij = oj * handle->desc.u;
+                        ii = oi * handle->desc.v;
                         if (mark_ifm_init == 1) {
-			  if(ofmb == my_ofm_start && ojb == 0 && ofm1 == ofmb && oj == ojb && oi == 0) {
+			  if((INTERLEAVE_IFM_BN == 1 && ofmb == my_ofm_start && ofm1 == ofmb) || (ofmb == my_ofm_start && ojb == 0 && ofm1 == ofmb && oj == ojb && oi == 0)) {
                             encoded_code_segments[encoded_stream_index].aux_index = ifm1;
+if(INTERLEAVE_IFM_BN) {
+                            encoded_code_segments[encoded_stream_index].aux_index0 = ij;
+                            encoded_code_segments[encoded_stream_index].aux_index1 = ii;
+                            encoded_code_segments[encoded_stream_index].aux_index2 = ij + handle->fwd_ofh_rb * handle->desc.u;
+                            encoded_code_segments[encoded_stream_index].aux_index3 = ii + handle->fwd_ofw_rb * handle->desc.v;
+} else {
+                            encoded_code_segments[encoded_stream_index].aux_index0 = 0;
+                            encoded_code_segments[encoded_stream_index].aux_index1 = 0;
+                            encoded_code_segments[encoded_stream_index].aux_index2 = handle->desc.H;
+                            encoded_code_segments[encoded_stream_index].aux_index3 = handle->desc.W;
+}
                             encoded_stream_index++;
 			  }
 			}
 
-                        ij = oj * handle->desc.u;
-                        ii = oi * handle->desc.v;
 
                         if (mark_ofm_init == 1) {
                           if (ifm1 == 0 && oj == 0 && oi == 0) {
@@ -993,15 +1023,26 @@ for (ltid = 0; ltid < handle->desc.threads; ltid++)
                 for (ofm1 = ofmb; ofm1 < LIBXSMM_MIN(ofmb+handle->block_fwd_ofm, my_ofm_end); ofm1++ ) {
                   for (ifmb = 0; ifmb < BLOCKSIFM; ifmb += handle->block_fwd_ifm) {
                     for (ifm1 = ifmb; ifm1 < LIBXSMM_MIN(ifmb+handle->block_fwd_ifm, BLOCKSIFM); ifm1 += BLOCKSIFM_BLOCKING) {
+                      ij = oj * handle->desc.u;
+                      ii = oi * handle->desc.v;
                       if (mark_ifm_init == 1) {
-		        if(ofmb == my_ofm_start && ojb == 0 && oj == ojb && oi == 0 && ofm1 == ofmb) {
+		        if((INTERLEAVE_IFM_BN == 1 && ofmb == my_ofm_start &&  ofm1 == ofmb) || (ofmb == my_ofm_start && ojb == 0 && oj == ojb && oi == 0 && ofm1 == ofmb)) {
                           encoded_code_segments[encoded_stream_index].aux_index = ifm1;
+if(INTERLEAVE_IFM_BN) {
+                            encoded_code_segments[encoded_stream_index].aux_index0 = ij;
+                            encoded_code_segments[encoded_stream_index].aux_index1 = ii;
+                            encoded_code_segments[encoded_stream_index].aux_index2 = ij + handle->fwd_ofh_rb * handle->desc.u;
+                            encoded_code_segments[encoded_stream_index].aux_index3 = ii + handle->fwd_ofw_rb * handle->desc.v;
+} else {
+                            encoded_code_segments[encoded_stream_index].aux_index0 = 0;
+                            encoded_code_segments[encoded_stream_index].aux_index1 = 0;
+                            encoded_code_segments[encoded_stream_index].aux_index2 = handle->desc.H;
+                            encoded_code_segments[encoded_stream_index].aux_index3 = handle->desc.W;
+}
                           encoded_stream_index++;
 			}
 		      }
 
-                      ij = oj * handle->desc.u;
-                      ii = oi * handle->desc.v;
 
                       if (mark_ofm_init == 1) {
                         if (ifm1 == 0 && oj == 0 && oi == 0) {

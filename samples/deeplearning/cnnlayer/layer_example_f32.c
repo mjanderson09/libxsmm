@@ -45,9 +45,9 @@
 /*#define USE_FUSED_RELU_BWD*/
 
 #define USE_FUSED_BATCH_STATS
-#define USE_FUSED_BATCH_NORM_FWD
-#define USE_ELEMENTWISE_FWD
-#define USE_FUSED_BATCH_NORM_RELU_FWD
+//#define USE_FUSED_BATCH_NORM_FWD
+//#define USE_ELEMENTWISE_FWD
+//#define USE_FUSED_BATCH_NORM_RELU_FWD
 
 #define USE_FUSED_BATCH_NORM_BWD
 #define USE_SPLIT_BWD
@@ -1448,9 +1448,13 @@ int main(int argc, char* argv[])
       printf("fp time = %.5g\n", ((double)(l_total/iters)));
       printf("GFLOPS  = %.5g\n", (flops*1e-9)/l_total);
 
-      printf("PERFDUMP,FP,%s,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%.5g,%.5g,%f,%f,%f,%f,%f,%f,%f\n", LIBXSMM_VERSION, nThreads, nImg, nIfm, nOfm,
+	  double input_size = (double)(nImg*nIfm*ifhp*ifwp*sizeof(float))/(1024.0*1024.0);
+	  double output_size = (double)(nImg*nOfm*ofhp*ofwp*sizeof(float))/(1024.0*1024.0);
+	  double weight_size = (double)(nIfm*nOfm*kw*kh*    sizeof(float))/(1024.0*1024.0);
+
+      printf("PERFDUMP,FP,%s,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%.5g,%.5g,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n", LIBXSMM_VERSION, nThreads, nImg, nIfm, nOfm,
         ifw, ifh, kw, kh, stride, padw, padh, ((double)(l_total/iters)), (flops*1e-9)/l_total, norms_fwd.l1_ref, norms_fwd.l1_tst,
-        norms_fwd.l2_abs, norms_fwd.l2_rel, norms_fwd.linf_abs, norms_fwd.linf_rel, norms_fwd.normf_rel);
+        norms_fwd.l2_abs, norms_fwd.l2_rel, norms_fwd.linf_abs, norms_fwd.linf_rel, norms_fwd.normf_rel, input_size, output_size, weight_size);
     }
 
     if ( (type == 'A' || type == 'B') && (nIfm > 3) ) {

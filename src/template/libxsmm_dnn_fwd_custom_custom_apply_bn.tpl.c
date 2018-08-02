@@ -92,10 +92,16 @@ for(ifm_idx = ifm1 ; ifm_idx < ifm1 + handle->blocksifm_blocking ; ifm_idx++ )
       _stddev = _mm512_load_ps(mystddev);
       _gamma = _mm512_load_ps(mygamma);
       _beta = _mm512_load_ps(mybeta);
+	  /*
+      _expect = _mm512_set1_ps(1.f);
+      _stddev = _mm512_set1_ps(1.f);
+      _gamma = _mm512_set1_ps(1.f);
+      _beta = _mm512_set1_ps(1.f);
+	  */
     }
-    for(my_h = 0 ; my_h < handle->desc.H ; my_h++) 
+    for(my_h = my_h_start ; my_h < my_h_end ; my_h++) 
     {
-      for(my_w = 0 ; my_w < handle->desc.W ; my_w++)
+      for(my_w = my_w_start ; my_w < my_w_end ; my_w++)
       {
         int _my_h = my_h + my_pad_h;
         int _my_w = my_w + my_pad_w;
@@ -106,8 +112,8 @@ for(ifm_idx = ifm1 ; ifm_idx < ifm1 + handle->blocksifm_blocking ; ifm_idx++ )
 	__m512 _input = _mm512_load_ps(&myinput[_my_w * handle->ifmblock + _my_h * handle->ifmblock * my_ldw]);
 
 	// Streaming store input to other buffer
-        if (((handle->fuse_ops & LIBXSMM_DNN_CONV_FUSE_BATCH_NORM_FWD) > 0) || ((handle->fuse_ops & LIBXSMM_DNN_CONV_FUSE_BATCH_NORM_RELU_FWD) > 0)) {
-  	  _mm512_stream_ps(&myinput_st[(my_w + handle->desc.pad_w_in) * handle->ifmblock + (my_h + handle->desc.pad_h_in) * handle->ifmblock * handle->ifwp], _input);
+    if (((handle->fuse_ops & LIBXSMM_DNN_CONV_FUSE_BATCH_NORM_FWD) > 0) || ((handle->fuse_ops & LIBXSMM_DNN_CONV_FUSE_BATCH_NORM_RELU_FWD) > 0)) {
+  	    _mm512_stream_ps(&myinput_st[(my_w + handle->desc.pad_w_in) * handle->ifmblock + (my_h + handle->desc.pad_h_in) * handle->ifmblock * handle->ifwp], _input);
 	}
 
 	// Apply bn
@@ -132,9 +138,9 @@ for(ifm_idx = ifm1 ; ifm_idx < ifm1 + handle->blocksifm_blocking ; ifm_idx++ )
       }
     }
   } else {
-    for(my_h = 0 ; my_h < handle->desc.H ; my_h++) 
+    for(my_h = my_h_start ; my_h < my_h_end ; my_h++) 
     {
-      for(my_w = 0 ; my_w < handle->desc.W ; my_w++)
+      for(my_w = my_w_start ; my_w < my_w_end ; my_w++)
       {
         #pragma omp simd
         #pragma vector aligned nontemporal(myinput_st)
@@ -156,8 +162,7 @@ for(ifm_idx = ifm1 ; ifm_idx < ifm1 + handle->blocksifm_blocking ; ifm_idx++ )
 
           if ((handle->fuse_ops & LIBXSMM_DNN_CONV_FUSE_ELEMENTWISE_FWD) > 0)
   	  {
-	    //after = after + myinput_left[my_c + _my_w * handle->ifmblock + _my_h * handle->ifmblock * my_ldw];
-	    after = after + 1;
+	    after = after + myinput_left[my_c + _my_w * handle->ifmblock + _my_h * handle->ifmblock * my_ldw];
 	  }
 
           if (((handle->fuse_ops & LIBXSMM_DNN_CONV_FUSE_BATCH_NORM_FWD) > 0) | ((handle->fuse_ops & LIBXSMM_DNN_CONV_FUSE_BATCH_NORM_RELU_FWD) > 0)) {
