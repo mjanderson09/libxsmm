@@ -39,19 +39,15 @@
 LIBXSMM_EXTERN_C typedef struct LIBXSMM_RETARGETABLE libxsmm_dnn_lstmcell_desc {
   int N;
   int nThreads;
-  int m; /* number of outputs */
-  int n; /* size of the minibatch */
-  int k; /* number of inputs */
-  int t; /* number of time steps */
-  int bm; /* blocksize for m */
-  int bn; /* blocksize for n */
-  int bk; /* blocksize for k */
-  int b_m1; /* b_?? parameters are used in libxsmm_bgemm */
-  int b_n1;
-  int b_k1;
-  int b_m2;
-  int b_n2;
-  int b_k2;
+  int m;     /* number of outputs */
+  int n;     /* size of the minibatch */
+  int k;     /* number of inputs */
+  int t;     /* number of time steps */
+  int bm;    /* blocksize for m */
+  int bn;    /* blocksize for n */
+  int bk;    /* blocksize for k */
+  int reuse; /* reuse/overwrite memory for FWD */
+  int pass;  /* denotes whether it is FWD/BWD/UPD */
   libxsmm_dnn_datatype datatype_in;         /* datatypes used for all input related buffer */
   libxsmm_dnn_datatype datatype_out;        /* datatypes used for all output related buffer */
   libxsmm_dnn_tensor_format buffer_format;  /* format which is for buffer buffers */
@@ -71,6 +67,8 @@ LIBXSMM_EXTERN_C typedef struct LIBXSMM_RETARGETABLE libxsmm_dnn_lstmcell {
   int bm;
   int bn;
   int bk;
+  int reuse;
+  int pass;
   int b_m1;
   int b_n1;
   int b_k1;
@@ -86,7 +84,6 @@ LIBXSMM_EXTERN_C typedef struct LIBXSMM_RETARGETABLE libxsmm_dnn_lstmcell {
   libxsmm_dnn_tensor* rf;
   libxsmm_dnn_tensor* ro;
   libxsmm_dnn_tensor* rc;
-  /* Currently we are not using the following 4 bias terms */
   libxsmm_dnn_tensor* bi;
   libxsmm_dnn_tensor* bf;
   libxsmm_dnn_tensor* bo;
@@ -135,14 +132,16 @@ LIBXSMM_EXTERN_C typedef struct LIBXSMM_RETARGETABLE libxsmm_dnn_lstmcell {
   libxsmm_dnn_tensor* djdbf;
   libxsmm_dnn_tensor* djdbo;
   libxsmm_dnn_tensor* djdbc;
-  libxsmm_dnn_tensor* rTp;
-  libxsmm_dnn_tensor* wTp;
-  libxsmm_dnn_tensor* deltaTp;
-  libxsmm_dnn_tensor* xTp;
+  libxsmm_dnn_tensor* i4t;
+  libxsmm_dnn_tensor* djdiMt;
+  libxsmm_dnn_tensor* djdfMt;
+  libxsmm_dnn_tensor* djdcMt;
+  libxsmm_dnn_tensor* djdoMt;
   libxsmm_bgemm_handle* handlewx;
   libxsmm_bgemm_handle* handleuh;
   libxsmm_bgemm_handle* handlett;
   libxsmm_bgemm_handle* handlewd;
+  libxsmm_barrier* barrier; /* barrier */
 } libxsmm_dnn_lstmcell;
 
 LIBXSMM_API libxsmm_dnn_lstmcell* libxsmm_dnn_create_lstmcell(libxsmm_dnn_lstmcell_desc lstmcell_desc, libxsmm_dnn_err_t* status);
@@ -158,9 +157,13 @@ LIBXSMM_API size_t libxsmm_dnn_lstmcell_get_internalstate_size(const libxsmm_dnn
 LIBXSMM_API libxsmm_dnn_err_t libxsmm_dnn_lstmcell_bind_internalstate(libxsmm_dnn_lstmcell* handle, const libxsmm_dnn_compute_kind kind, const void* internalstate);
 LIBXSMM_API libxsmm_dnn_err_t libxsmm_dnn_lstmcell_release_internalstate(libxsmm_dnn_lstmcell* handle, const libxsmm_dnn_compute_kind kind);
 
+LIBXSMM_API libxsmm_dnn_err_t libxsmm_dnn_lstmcell_assign_internalstate(libxsmm_dnn_lstmcell* handle, const void* igoldtb, const void* fgoldtb, const void* ogoldtb, const void* cgoldtb, const void* dgoldtb);
+
 LIBXSMM_API libxsmm_dnn_err_t libxsmm_dnn_lstmcell_bind_tensor(libxsmm_dnn_lstmcell* handle, const libxsmm_dnn_tensor* tensor, const libxsmm_dnn_tensor_type type);
 LIBXSMM_API libxsmm_dnn_tensor* libxsmm_dnn_lstmcell_get_tensor(libxsmm_dnn_lstmcell* handle, const libxsmm_dnn_tensor_type type, libxsmm_dnn_err_t* status);
 LIBXSMM_API libxsmm_dnn_err_t libxsmm_dnn_lstmcell_release_tensor(libxsmm_dnn_lstmcell* handle, const libxsmm_dnn_tensor_type type);
+
+LIBXSMM_API void libxsmm_dnn_lstmcell_split_wx(libxsmm_dnn_lstmcell* lstm, libxsmm_blasint offset, void* src, void* dst, int start_thread, int tid, int nthreads);
 
 LIBXSMM_API libxsmm_dnn_err_t libxsmm_dnn_lstmcell_fwd(libxsmm_dnn_lstmcell* lstm, int start_thread, int tid);
 LIBXSMM_API libxsmm_dnn_err_t libxsmm_dnn_lstmcell_bwd_upd_bu(libxsmm_dnn_lstmcell* lstm, int start_thread, int tid, int pass);

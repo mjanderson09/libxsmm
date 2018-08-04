@@ -38,8 +38,8 @@
         (LIBXSMM_FEQ(1, ALPHA) /*|| LIBXSMM_FEQ(-1, ALPHA)*/) && \
         (LIBXSMM_FEQ(1, BETA) || LIBXSMM_FEQ(0, BETA)))
 
-#define LIBXSMM_TRANS_NO_BYPASS_DIMS(M, N, LDO) \
-  ((((unsigned int)(M)) * (N)) <= ((LIBXSMM_AVG_M) * (LIBXSMM_AVG_N)))
+#define LIBXSMM_TRANS_NO_BYPASS(M, N) ( \
+  (((unsigned int)(M)) * (N)) <= ((unsigned int)(LIBXSMM_AVG_M) * (LIBXSMM_AVG_N)))
 
 
 /** Initialize GEMM descriptor as used by low-level routines (type-specific). */
@@ -79,6 +79,12 @@ LIBXSMM_API libxsmm_gemm_descriptor* libxsmm_gemm_descriptor_init2(libxsmm_descr
   libxsmm_gemm_precision iprec, libxsmm_gemm_precision oprec, libxsmm_blasint m, libxsmm_blasint n, libxsmm_blasint k,
   libxsmm_blasint lda, libxsmm_blasint ldb, libxsmm_blasint ldc, const void* alpha, const void* beta,
   int flags, libxsmm_gemm_prefetch_type prefetch);
+/** Similar to libxsmm_gemm_descriptor_init2 with optional type-converted alpha/beta (dalpha/dbeta). */
+LIBXSMM_API libxsmm_gemm_descriptor* libxsmm_gemm_descriptor_init3(libxsmm_descriptor_blob* blob,
+  libxsmm_gemm_precision iprec, libxsmm_gemm_precision oprec, libxsmm_blasint m, libxsmm_blasint n, libxsmm_blasint k,
+  libxsmm_blasint lda, libxsmm_blasint ldb, libxsmm_blasint ldc, const void* alpha, const void* beta,
+  int flags, libxsmm_gemm_prefetch_type prefetch,
+  double* dalpha, double* dbeta);
 
 /** Initialize transpose descriptor as used by low-level routines. */
 LIBXSMM_API libxsmm_trans_descriptor* libxsmm_trans_descriptor_init(libxsmm_descriptor_blob* blob,

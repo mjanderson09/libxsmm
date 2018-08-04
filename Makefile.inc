@@ -29,6 +29,8 @@
 # Hans Pabst (Intel Corp.)
 #############################################################################
 
+MAKEINC = $(abspath $(dir $(filter %Makefile.inc,$(MAKEFILE_LIST))))
+
 ifeq (d,$(filter d,$(MAKEFLAGS)))
   SHELL = bash -xv
 endif
@@ -41,9 +43,6 @@ ifeq (Windows_NT,$(OS))
   SLIBEXT ?= lib
 endif
 
-# Python interpreter per PYTHON=/path/to/python
-PYTHON ?= $(shell which python 2>/dev/null)
-
 # Command line utilities
 #PKGCFG ?= $(shell which pkg-config 2>/dev/null)
 CP ?= $(shell which cp 2>/dev/null)
@@ -51,6 +50,19 @@ MV ?= $(shell which mv 2>/dev/null)
 UNAME ?= $(shell uname)
 MAKE ?= make
 ENV ?= env
+
+# Python interpreter per PYTHON=/path/to/python
+PYTHON3 ?= $(shell which python3 2>/dev/null)
+PYTHON ?= $(shell which python 2>/dev/null)
+
+ifeq (,$(PYTHON))
+ifneq (,$(PYTHON3))
+  SHELL := env PATH=$(MAKEINC):$(PATH) $(SHELL)
+  PYTHON = $(shell ln -s $(PYTHON3) $(MAKEINC)/python 2>/dev/null && which python 2>/dev/null)
+else
+  $(info ERROR: No Python interpreter found!)
+endif
+endif
 
 ifneq (Darwin,$(UNAME))
   ifneq (,$(strip $(CP)))
@@ -67,8 +79,16 @@ endif
 CMAIN = "main\s*(.*)"
 FMAIN = "^\s*PROGRAM\s\s*\w\w*\(\s\s*\!.*\)*$$"
 
+# Debugging and symbols (e.g., when profiling)
+SYM ?= 0
+DBG ?= 0
+
 # Optimization level
-OPT ?= 2
+ifeq (0,$(DBG))
+  OPT ?= 2
+else
+  OPT ?= 0
+endif
 
 # Optimization flag derived from OPT flag
 ifeq (0,$(shell echo "$(OPT)" | grep -q "^[0-9]\+$$"; echo "$$?"))
@@ -132,10 +152,6 @@ endif
 MKTEMP = $(DEPDIR)/.mktmp.sh
 FLOCK = $(DEPDIR)/.flock.sh
 
-# Debugging and symbols (e.g., when profiling)
-SYM ?= 0
-DBG ?= 0
-
 # THREADS refers to foundational TRT (and not necessarily Posix Threads)
 THREADS ?= 1
 
@@ -197,19 +213,26 @@ libpath = $(strip $(if $1, \
 abslib = $(strip $(call abslibpath,$1) $(call abslibfile,$1))
 
 # Embedd soname into shared library
+SONAMELNK ?= 2
 ifneq (Darwin,$(UNAME))
   ifeq (0,$(shell ln -fs this-file-does-not-exist .ln 2>/dev/null && echo "$$?" && rm .ln 2>/dev/null))
-    soname = -o $1.$2.$3.$4 -Wl,-soname=$(strip $(notdir $1).$5) \
-             $(shell cd $(dir $1) && ln -fs $(notdir $1.$2.$3.$4) $(notdir $1.$5)) \
-             $(shell cd $(dir $1) && ln -fs $(notdir $1.$5) $(notdir $1))
+    solink = -o $1.$2.$3.$4 -Wl,-soname=$(strip $(notdir $1).$5)
+    ifneq (0,$(SONAMELNK))
+      solink += $(shell cd $(dir $1) && ln -fs $(notdir $1.$2.$3.$4) $(notdir $1.$5))
+    endif
+    ifneq (0,$(shell echo "$$((1<$(SONAMELNK) || 0>$(SONAMELNK)))"))
+      solink += $(shell cd $(dir $1) && ln -fs $(notdir $1.$5) $(notdir $1))
+    endif
   else # MinGW
-    soname = -o $1 -Wl,-soname=$(strip $(notdir $1).$5)
+    solink = -o $1 -Wl,-soname=$(strip $(notdir $1).$5)
   endif
 else # osx
-  soname = -o $(basename $1).$2$(suffix $1) \
+  solink = -o $(basename $1).$2$(suffix $1) \
            -install_name $(notdir $(basename $1).$2$(suffix $1)) \
-           -current_version $2.$3.$4 -compatibility_version $5 \
-           $(shell cd $(dir $1) && ln -fs $(notdir $(basename $1).$2$(suffix $1)) $(notdir $1))
+           -current_version $2.$3.$4 -compatibility_version $5
+  ifneq (0,$(SONAMELNK))
+    solink += $(shell cd $(dir $1) && ln -fs $(notdir $(basename $1).$2$(suffix $1)) $(notdir $1))
+  endif
 endif
 
 # Pickup OpenMP library name if passed as OMP=libname|name
@@ -289,7 +312,7 @@ ifeq (0,$(BLAS))
 else
   NOBLASLIB = $(NULL)
 endif
-BLASLIB ?= $(NOBLASLIB)
+XBLASLIB ?= $(NOBLASLIB)
 
 COMPILER_VERSION_FLAG ?= --version
 CC_VERSION_FLAG ?= $(COMPILER_VERSION_FLAG)
@@ -341,7 +364,7 @@ else
       FC = gfortran
     else
       FC = $(NULL)
-    endif  
+    endif
   endif
   endif
   endif
@@ -612,24 +635,44 @@ PGI ?= 0
 # linker setup
 LD = $(CC)
 XLD = $(CXX)
-ifneq (,$(strip $(FC)))
-  FLD = $(FC)
-else
-  FLD = $(LD)
-endif
+
 ifeq (0,$(DEPSTATIC))
   LIB_LD := $(LD) -shared
   LIB_XLD := $(XLD) -shared
-  LIB_FLD := $(FLD) -shared
-  ifneq (0,$(CRAY))
-    XLD += -dynamic
-    FLD += -dynamic
-    LD += -dynamic
-  endif
 else
-  LIB_LD = $(LD)
-  LIB_XLD = $(XLD)
-  LIB_FLD = $(FLD)
+  LIB_LD := $(LD)
+  LIB_XLD := $(XLD)
+endif
+
+ifeq (3,$(GCC)) # try to avoid some more references to Fortran runtime libraries
+  LIBGFORTRAN = $(call libpath,$(FC) $(SLDFLAGS),$(NULL),gfortran)
+  ifneq (,$(strip $(LIBGFORTRAN)))
+    FLDFLAGS += $(call abslibpath,$(LIBGFORTRAN)) $(XLIB_BEGIN) $(call abslibfile,$(LIBGFORTRAN)) $(XLIB_END)
+    LIB_FLD = $(LIB_LD)
+    FLD = $(LD)
+  endif
+endif
+
+ifeq (,$(strip $(FLD)))
+ifneq (,$(strip $(FC)))
+  FLD = $(FC)
+  ifeq (0,$(DEPSTATIC))
+    LIB_FLD := $(FLD) -shared
+  else
+    LIB_FLD := $(FLD)
+  endif
+else # fallback
+  LIB_FLD := $(LIB_LD)
+  FLD := $(LD)
+endif
+endif
+
+ifneq (0,$(CRAY))
+ifeq (0,$(DEPSTATIC))
+  XLD := $(XLD) -dynamic
+  FLD := $(FLD) -dynamic
+  LD := $(LD) -dynamic
+endif
 endif
 
 # Avoid more sophisticated flags of the GCC tool chain,
@@ -672,11 +715,14 @@ ifneq (0,$(INTEL))
   endif
   # flag specifying output directory must be last
   FMFLAGS += -module
+  CXXFLAGS += $(OPTFLAG)
+  CFLAGS += $(OPTFLAG)
+  FCFLAGS += $(OPTFLAG)
   ifeq (0,$(DBG))
     # consider more accurate -fp-model (C/C++: precise, Fortran: source)
-    CXXFLAGS += $(OPTFLAG) -fno-alias -ansi-alias -qoverride_limits #-fp-model fast=2
-    CFLAGS += $(OPTFLAG) -fno-alias -ansi-alias -qoverride_limits #-fp-model fast=2
-    FCFLAGS += $(OPTFLAG) -qoverride_limits #-fp-model fast=2
+    CXXFLAGS += -fno-alias -ansi-alias -qoverride_limits #-fp-model fast=2
+    CFLAGS += -fno-alias -ansi-alias -qoverride_limits #-fp-model fast=2
+    FCFLAGS += -qoverride_limits #-fp-model fast=2
     ifneq (0,$(shell echo "$$((130000<=$(FC_VERSION)))"))
       FCFLAGS += -align array64byte
     endif
@@ -696,9 +742,7 @@ ifneq (0,$(INTEL))
     ifneq (0,$(shell echo "$$((1<$(DBG) || 0>$(DBG)))"))
       DFLAGS += -D_DEBUG
     endif
-    CXXFLAGS += -O0
-    CFLAGS += -O0
-    FCFLAGS += -O0 -check
+    FCFLAGS += -check
     SYM = $(DBG)
   endif
   ifneq (0,$(INSTRUMENT))
@@ -807,15 +851,9 @@ ifneq (0,$(INTEL))
   endif
 else # GCC assumed
   FCLDFLAGS += $(XLIB_BEGIN) -lc -lstdc++ $(XLIB_END)
-  LIBGFORTRAN = $(call libpath,$(FLD) $(SLDFLAGS),$(NULL),gfortran)
-  ifneq (,$(strip $(LIBGFORTRAN)))
-    LDFLAGS += $(call abslibpath,$(LIBGFORTRAN))
-    CXXLDFLAGS += $(XLIB_BEGIN) -lc $(call abslibfile,$(LIBGFORTRAN)) -lm $(XLIB_END)
-    CLDFLAGS += $(XLIB_BEGIN) -lstdc++ $(call abslibfile,$(LIBGFORTRAN)) -lm $(XLIB_END)
-  else
-    CXXLDFLAGS += $(XLIB_BEGIN) -lc $(XLIB_END)
-    CLDFLAGS += $(XLIB_BEGIN) -lstdc++ $(XLIB_END)
-  endif
+  CLDFLAGS += $(XLIB_BEGIN) -lstdc++ $(XLIB_END)
+  CXXLDFLAGS += $(XLIB_BEGIN) -lc $(XLIB_END)
+  LDFLAGS += $(XLIB_BEGIN) -lm $(XLIB_END)
   ifeq (0,$(COMPATIBLE))
     ifneq (0,$(shell echo "$$((40700<=$(GCC_VERSION)))"))
       CXXFLAGS += -std=c++11
@@ -828,8 +866,13 @@ else # GCC assumed
                  -Wcharacter-truncation -Wline-truncation \
                  -Wconversion -Wintrinsics-std \
                  -Wimplicit-interface -Wimplicit-procedure
+    ifneq (0,$(shell echo "$$((40200<=$(FC_VERSION)))"))
+      CPEDANTIC += -Wno-overlength-strings
+    else ifneq (0,$(CLANG))
+      CPEDANTIC += -Wno-overlength-strings
+    endif
     ifneq (0,$(shell echo "$$((40500<=$(FC_VERSION)))"))
-      CPEDANTIC += -Wshadow -Wno-overlength-strings
+      CPEDANTIC += -Wshadow
     endif
     ifneq (0,$(shell echo "$$((50000<=$(FC_VERSION)))"))
       FWARNEXTRA = -Wuse-without-only -Wc-binding-type \
@@ -880,10 +923,10 @@ else # GCC assumed
   else # fallback
     FMFLAGS += -I
   endif
+  CXXFLAGS += $(OPTFLAG)
+  CFLAGS += $(OPTFLAG)
+  FCFLAGS += $(OPTFLAG)
   ifeq (0,$(DBG))
-    CXXFLAGS += $(OPTFLAG)
-    CFLAGS += $(OPTFLAG)
-    FCFLAGS += $(OPTFLAG)
     ifeq (0,$(COMPATIBLE))
       CXXFLAGS += -funroll-loops
       CFLAGS += -funroll-loops
@@ -907,9 +950,6 @@ else # GCC assumed
     ifneq (0,$(shell echo "$$((1<$(DBG) || 0>$(DBG)))"))
       DFLAGS += -D_DEBUG
     endif
-    CXXFLAGS += -O0
-    CFLAGS += -O0
-    FCFLAGS += -O0
     SYM = $(DBG)
   endif
   ifneq (0,$(INSTRUMENT))
@@ -1006,6 +1046,19 @@ endif
 
 ifeq (,$(CTARGET))
 ifneq (0,$(shell echo "$$((3>$(DBG)))"))
+  # prevents Clang BE error (CRC32 and others)
+  ifneq (Darwin,$(UNAME))
+  ifeq (3,$(GCC))
+  ifeq (0,$(DEPSTATIC))
+    CTARGET = -msse3
+  else ifneq (0,$(SHARED))
+    ifneq (,$(SHARED))
+      CTARGET = -msse3
+    endif
+  endif
+  endif
+  endif
+  ifeq (,$(CTARGET))
   ifneq (0,$(shell echo "$$((2<=$(AVX)))"))
     ifeq (3,$(AVX))
     ifneq (0,$(shell echo "$$(((0!=$(CLANG) && 40000<=$(CC_VERSION)) || 50000<=$(GCC_VERSION) || 0==$(CC_VERSION)))"))
@@ -1050,7 +1103,7 @@ ifneq (0,$(shell echo "$$((3>$(DBG)))"))
       CTARGET ?= -msse4.2
     else ifeq (2,$(SSE))
       # implicitly present (64-bit ABI)
-    else #ifneq (30,$(GCC)$(STATIC))
+    else
       ifeq (3,$(SSE))
         ifneq (0,$(PGI))
           #DFLAGS += -D__SSSE3__ -D__SSE3__
@@ -1058,8 +1111,7 @@ ifneq (0,$(shell echo "$$((3>$(DBG)))"))
         endif
         ifneq (Darwin,$(UNAME))
           CTARGET ?= -msse3
-        else
-          # prevents Clang backend error with CRC32/other instructions
+        else # prevents Clang BE error (CRC32 and others)
           CTARGET ?= -msse4.2
         endif
       else ifeq (4,$(SSE))
@@ -1067,17 +1119,14 @@ ifneq (0,$(shell echo "$$((3>$(DBG)))"))
           #DFLAGS += -D__SSE4_2__ -D__SSE4_1__ -D__SSSE3__ -D__SSE3__
           CTARGET = -tp=nehalem
         endif
-        ifneq (30,$(GCC)$(STATIC))
-          CTARGET ?= -msse4.2
-        else
-          CTARGET ?= -msse3
-        endif
+        CTARGET ?= -msse4.2
       else # perhaps better to use TARGET flag directly
         CTARGET = -msse$(SSE)
       endif
     endif
   else ifneq (0,$(AVX))
     CTARGET = -march=native
+  endif
   endif
 endif
 endif
@@ -1465,7 +1514,7 @@ else ifneq (0,$(BLAS)) # generic
       endif
     endif
     # most people expect to pickup OpenBLAS (if available) even when libblas/liblapack are available as well; use OPENBLAS=0 to avoid this
-    OPENBLAS = $(if $(BLASLIBFILE),1,0)
+    OPENBLAS := $(if $(BLASLIBFILE),1,0)
 
     ifneq (0,$(OPENBLAS)) # OpenBLAS
       # OpenBLAS also carries the CBLAS bits
@@ -1495,7 +1544,7 @@ else ifneq (0,$(BLAS)) # generic
       BLAS_LDFLAGS += -lblas
     endif
     ifeq (0,$(OPENBLAS)) # BLAS (reference)
-      ifneq (0,$(STATIC))
+      ifneq (0,$(DEPSTATIC))
       ifneq (,$(LIBGFORTRAN))
         BLAS_CLDFLAGS += $(XLIB_BEGIN) $(call abslibfile,$(LIBGFORTRAN)) -lm $(XLIB_END)
       endif
@@ -1560,7 +1609,7 @@ STATE := $(foreach V,$(sort $(.VARIABLES)), $(if \
   $(if $(filter-out .SHELLSTATUS .DEFAULT_GOAL MAKEFILE_LIST MAKEOVERRIDES MAKEFLAGS SHELL \
     $(EXCLUDE_STATE) CPUFLAGS TEST TESTSIZE BRACE_OPEN BRACE_CLOSE FLOCK MKTEMP \
     abslibfile abslibpath absliblpath abslibrpath \
-    libpath abslib soname extname objname,$V), \
+    libpath abslib solink extname objname,$V), \
     $V=$($V)?)))
 .state: $(shell echo '$(STATE)' | $(DEPDIR)/.state.sh)
 

@@ -50,7 +50,6 @@ LIBXSMM_EXTERN_C typedef struct LIBXSMM_RETARGETABLE libxsmm_matdiff_info {
   libxsmm_blasint linf_abs_m, linf_abs_n;
 } libxsmm_matdiff_info;
 
-
 /** Utility function to calculate the difference between two matrices. */
 LIBXSMM_API int libxsmm_matdiff(libxsmm_datatype datatype, libxsmm_blasint m, libxsmm_blasint n,
   const void* ref, const void* tst, const libxsmm_blasint* ldref, const libxsmm_blasint* ldtst,
@@ -58,6 +57,23 @@ LIBXSMM_API int libxsmm_matdiff(libxsmm_datatype datatype, libxsmm_blasint m, li
 
 LIBXSMM_API void libxsmm_matdiff_reduce(libxsmm_matdiff_info* output, const libxsmm_matdiff_info* input);
 
+/** Greatest common divisor. */
+LIBXSMM_API size_t libxsmm_gcd(size_t a, size_t b);
+/** Least common multiple. */
+LIBXSMM_API size_t libxsmm_lcm(size_t a, size_t b);
+
+/**
+ * This function finds prime-factors (up to 32) of an unsigned integer in ascending order, and
+ * returns the number of factors found (zero if the given number is prime and unequal to two).
+ */
+LIBXSMM_API int libxsmm_primes_u32(unsigned int num, unsigned int num_factors_n32[]);
+
+/**
+ * Divides the amount of work into prime factors and selects factors such
+ * that the product is within the given limit (0/1-Knapsack problem).
+ * For example: work=12=2*2*3 and split_limit=6 then result=2*3=6.
+ */
+LIBXSMM_API unsigned int libxsmm_split_work(unsigned int work, unsigned int split_limit);
 
 /* SQRT with Newton's method using integer arithmetic. */
 LIBXSMM_API unsigned int libxsmm_isqrt_u64(unsigned long long x);
@@ -68,12 +84,10 @@ LIBXSMM_API double libxsmm_dsqrt(double x);
 /* SQRT with Newton's method using single-precision. */
 LIBXSMM_API float libxsmm_ssqrt(float x);
 
-
 /* CBRT with Newton's method using integer arithmetic. */
 LIBXSMM_API unsigned int libxsmm_icbrt_u64(unsigned long long x);
 /* CBRT with Newton's method using integer arithmetic. */
 LIBXSMM_API unsigned int libxsmm_icbrt_u32(unsigned int x);
-
 
 /**
  * Exponential function, which exposes the number of iterations taken in the main case (1...22). For example,
@@ -110,7 +124,7 @@ LIBXSMM_API void libxsmm_srand(unsigned int seed);
 LIBXSMM_API unsigned int libxsmm_rand_u32(unsigned int n);
 
 /** Similar to libxsmm_rand_u32, but return a DP-value in the interval [0, 1). */
-LIBXSMM_API double libxsmm_rand_f64();
+LIBXSMM_API double libxsmm_rand_f64(void);
 
 #endif /*LIBXSMM_MATH_H*/
 

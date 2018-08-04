@@ -41,7 +41,7 @@
 
 //# define USE_OVERWRITE
 /*# define USE_BWD_NO_FILTER_TRANSPOSE_OVERWRITE*/
-/*# define USE_FUSED_BATCH_STATS*/
+# define USE_FUSED_BATCH_STATS
 /*#define USE_FUSED_RELU_BWD*/
 
 #define USE_FUSED_BATCH_STATS
@@ -288,6 +288,8 @@ LIBXSMM_INLINE void naive_conv_fp(naive_conv_t* param, float* input, float * inp
       }
     }
   }
+#else
+  LIBXSMM_UNUSED(bias);
 #endif
 
 #if defined(_OPENMP)
@@ -1165,7 +1167,7 @@ int main(int argc, char* argv[])
     /* let's allocate and bind scratch */
     scratch_size = libxsmm_dnn_get_scratch_size( libxsmm_handle, LIBXSMM_DNN_COMPUTE_KIND_ALL, &status );
     CHKERR_LIBXSMM_DNN( status );
-    scratch = libxsmm_aligned_malloc( scratch_size, 2097152 );
+    scratch = libxsmm_aligned_scratch( scratch_size, 2097152 );
     CHKERR_LIBXSMM_DNN( libxsmm_dnn_bind_scratch( libxsmm_handle, LIBXSMM_DNN_COMPUTE_KIND_ALL, scratch ) );
     /* set scratch to bogus to make sure that libxsmm takes care of zeroing internally */
     init_buf( (float*)scratch, scratch_size/4, 0, 0 );
@@ -1256,16 +1258,17 @@ int main(int argc, char* argv[])
         for ( ch_i = 0; ch_i < nOfm/16; ++ch_i ) {
           for ( img_i = 0; img_i < nImg; ++img_i ) {
             for ( ch_j = 0; ch_j < 16; ++ch_j ) {
-              ch_sum_fuse[(ch_i*16) + ch_j]  += sum_fuse[0][ch_i][img_i][ch_j];
-              ch_sum2_fuse[(ch_i*16) + ch_j] += sum_fuse[1][ch_i][img_i][ch_j];
+              ch_sum_fuse[(ch_i*16) + ch_j]  += LIBXSMM_VLA_ACCESS(4, sum_fuse, 0, ch_i, img_i, ch_j, nOfm/16, nImg, 16);
+              ch_sum2_fuse[(ch_i*16) + ch_j] += LIBXSMM_VLA_ACCESS(4, sum_fuse, 1, ch_i, img_i, ch_j, nOfm/16, nImg, 16);
             }
           }
         }
         for ( img_i = 0; img_i < nImg; ++img_i ) {
           for ( ch_i = 0; ch_i < nOfm; ++ch_i ) {
             for ( pxl_i = 0; pxl_i < ofhp*ofwp; ++pxl_i ) {
-              ch_sum[ch_i]  += sum_naive[img_i][ch_i][pxl_i];
-              ch_sum2[ch_i] += (sum_naive[img_i][ch_i][pxl_i]*sum_naive[img_i][ch_i][pxl_i]);
+              const float f = LIBXSMM_VLA_ACCESS(3, sum_naive, img_i, ch_i, pxl_i, nOfm, ofhp*ofwp);
+              ch_sum2[ch_i] += f * f;
+              ch_sum[ch_i]  += f;
             }
           }
         }
@@ -1649,7 +1652,7 @@ int main(int argc, char* argv[])
     /* let's allocate and bind scratch */
     scratch_size = libxsmm_dnn_get_scratch_size( libxsmm_handle, LIBXSMM_DNN_COMPUTE_KIND_ALL, &status );
     CHKERR_LIBXSMM_DNN( status );
-    scratch = libxsmm_aligned_malloc( scratch_size, 2097152 );
+    scratch = libxsmm_aligned_scratch( scratch_size, 2097152 );
     CHKERR_LIBXSMM_DNN( libxsmm_dnn_bind_scratch( libxsmm_handle, LIBXSMM_DNN_COMPUTE_KIND_ALL, scratch ) );
     /* set scratch to bogus to make sure that libxsmm takes care of zeroing internally */
     init_buf( (float*)scratch, scratch_size/4, 0, 0 );
@@ -1965,7 +1968,7 @@ int main(int argc, char* argv[])
     /* let's allocate and bind scratch */
     scratch_size = libxsmm_dnn_get_scratch_size( libxsmm_handle, LIBXSMM_DNN_COMPUTE_KIND_ALL, &status );
     CHKERR_LIBXSMM_DNN( status );
-    scratch = libxsmm_aligned_malloc( scratch_size, 2097152 );
+    scratch = libxsmm_aligned_scratch( scratch_size, 2097152 );
     CHKERR_LIBXSMM_DNN( libxsmm_dnn_bind_scratch( libxsmm_handle, LIBXSMM_DNN_COMPUTE_KIND_ALL, scratch ) );
     /* set scratch to bogus to make sure that libxsmm takes care of zeroing internally */
     init_buf( (float*)scratch, scratch_size/4, 0, 0 );

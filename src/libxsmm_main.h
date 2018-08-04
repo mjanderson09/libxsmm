@@ -39,7 +39,7 @@
 #endif
 
 #if !defined(LIBXSMM_MAX_NTHREADS)
-# define LIBXSMM_MAX_NTHREADS 512
+# define LIBXSMM_MAX_NTHREADS 1024
 #endif
 #if !defined(LIBXSMM_MALLOC_SCRATCH_MAX_NPOOLS)
 # define LIBXSMM_MALLOC_SCRATCH_MAX_NPOOLS LIBXSMM_MAX_NTHREADS
@@ -226,6 +226,10 @@ LIBXSMM_EXTERN_C typedef LIBXSMM_RETARGETABLE void (*libxsmm_bf16convfunction)(
   const libxsmm_bfloat16* input1, const libxsmm_bfloat16* input2, libxsmm_bfloat16* output,
   const libxsmm_bfloat16* ipf1, const libxsmm_bfloat16* ipf2, const libxsmm_bfloat16* opf, ...);
 
+LIBXSMM_EXTERN_C typedef LIBXSMM_RETARGETABLE void (*libxsmm_bf16f32convfunction)(
+  const libxsmm_bfloat16* input1, const float* input2, libxsmm_bfloat16* output,
+  const libxsmm_bfloat16* ipf1, const float* ipf2, const libxsmm_bfloat16* opf, ...);
+
 LIBXSMM_EXTERN_C typedef LIBXSMM_RETARGETABLE void (*libxsmm_wconvfunction)(
   const short* input1, const short* input2, int* output,
   const short* ipf1, const short* ipf2, const int* opf, ...);
@@ -266,6 +270,7 @@ LIBXSMM_EXTERN_C typedef LIBXSMM_RETARGETABLE void (*libxsmm_budconvfunction_bwd
 LIBXSMM_EXTERN_C typedef union LIBXSMM_RETARGETABLE libxsmm_xconvfunction {
   libxsmm_sconvfunction sconv;
   libxsmm_bf16convfunction bf16conv;
+  libxsmm_bf16f32convfunction bf1632conv;
   libxsmm_wsconvfunction wsconv;
   libxsmm_uwsconvfunction uwsconv;
   libxsmm_wconvfunction wconv;
@@ -417,7 +422,7 @@ LIBXSMM_EXTERN_C struct LIBXSMM_RETARGETABLE libxsmm_dnn_layer {
   libxsmm_dnn_tensor* reg_filter_tr;
   /* batchnorm stats */
   libxsmm_dnn_tensor* batch_stats;
-  /* maxstats used in low-recision kernels */
+  /* maxstats used in low-precision kernels */
   libxsmm_dnn_tensor* maxstats_fwd;
   libxsmm_dnn_tensor* maxstats_bwd;
   libxsmm_dnn_tensor* maxstats_upd;
@@ -428,25 +433,30 @@ LIBXSMM_EXTERN_C struct LIBXSMM_RETARGETABLE libxsmm_dnn_layer {
   /* scratch */
   void* scratch1;
   size_t scratch1_size;
+  void* scratch2;
+  size_t scratch2_size;
   void* scratch3;
   size_t scratch3_size;
-  void* scratch4;
+  void* scratch4;             /* TLS: used to reduce weights */
   size_t scratch4_size;
-  void* scratch5;             /* This scratch is used as a copy buffer when padding needs to be applied */
-  void* scratch6;
-  void* scratch7;             /* [H][W][c-block] tensor (generic fwd/bwd convolution) */
-  void* scratch8;             /* output_scratch (generic update convolution) */
-  void* scratch9;             /* filter_scratch (generic update convolution) */
-  size_t scratch6_size, scratch7_size, scratch8_size, scratch9_size;
+  void* scratch5;             /* TLS: copy-buffer (if padding is needed), or [H][W][c-block]-tensor (generic FWD/BWD) */
+  size_t max_scratch5_size;
+#if !defined(LIBXSMM_DNN_VLA_TLS2)
+  void* scratch6;             /* TLS: output_scratch (generic WU), or float-accumulation buffer */
+  size_t scratch6_size;
+#endif
+#if !defined(LIBXSMM_DNN_VLA_TLS3)
+  void* scratch7;             /* TLS: filter_scratch (generic WU) */
+  size_t scratch7_size;
+#endif
   size_t minibatch_scratch_size;
   size_t fwdbwd_scratch_size;
-  size_t max_scratch5_size;
   int padding_flag;           /* Flag that dictates if we should apply padding in the input */
-  void* scratchIw;
+  void* scratchIw;            /* Winograd input buffer */
   size_t scratchIw_size;
-  void* scratchOw;
+  void* scratchOw;            /* Winograd output buffer */
   size_t scratchOw_size;
-  void* scratchVk;
+  void* scratchVk;            /* Winograd weight buffer */
   size_t scratchVk_size;
 
   /* JIT-generated convolution code */
@@ -581,10 +591,6 @@ typedef enum libxsmm_malloc_flags {
   LIBXSMM_MALLOC_FLAG_RWX = LIBXSMM_MALLOC_FLAG_RW | LIBXSMM_MALLOC_FLAG_X
 } libxsmm_malloc_flags;
 
-/** Greatest common divisor. */
-LIBXSMM_API_INTERN size_t libxsmm_gcd(size_t a, size_t b);
-/** Least common multiple. */
-LIBXSMM_API_INTERN size_t libxsmm_lcm(size_t a, size_t b);
 /** Calculates an alignment depending on supposedly allocated size; alignment can be zero ("auto"). */
 LIBXSMM_API_INTERN size_t libxsmm_alignment(size_t size, size_t alignment);
 
@@ -621,7 +627,14 @@ LIBXSMM_API_INTERN int libxsmm_malloc_attrib(void** memory, int flags,
   /** If a name is given, an executable buffer will be dumped into a file. */
   const char* name);
 
+/** Returns the type-size of data-type (can be also libxsmm_gemm_precision). */
 LIBXSMM_API_INTERN unsigned char libxsmm_typesize(libxsmm_datatype datatype);
+
+/** Determines the given value in double-precision based on the given type. */
+LIBXSMM_API_INTERN int libxsmm_dvalue(libxsmm_datatype datatype, const void* value, double* dvalue);
+
+/** Determines the generic value given in double-precision. */
+LIBXSMM_API_INTERN int libxsmm_cast(libxsmm_datatype datatype, double dvalue, char value[]);
 
 /** Services a build request, and (optionally) registers the code (use regindex=LIBXSMM_CAPACITY_REGISTRY for unmanaged code). */
 LIBXSMM_API_INTERN int libxsmm_build(const libxsmm_build_request* request, unsigned int regindex, libxsmm_code_pointer* code);
@@ -690,9 +703,9 @@ LIBXSMM_APIVAR(libxsmm_malloc_function libxsmm_scratch_malloc_fn);
 LIBXSMM_APIVAR(libxsmm_free_function libxsmm_default_free_fn);
 /** Function used to release scratch memory. */
 LIBXSMM_APIVAR(libxsmm_free_function libxsmm_scratch_free_fn);
-/** If non-NULL, this context used for the context-form of the malloc/free function. */
+/** If non-NULL, this context is used by the context-form of memory allocation. */
 LIBXSMM_APIVAR(void* libxsmm_default_allocator_context);
-/** If non-NULL, this context used for the context-form of the malloc/free function. */
+/** If non-NULL, this context is used by the context-form of memory allocation. */
 LIBXSMM_APIVAR(void* libxsmm_scratch_allocator_context);
 /** Number of discovered threads (per libxsmm_get_tid) */
 LIBXSMM_APIVAR(unsigned int libxsmm_threads_count);

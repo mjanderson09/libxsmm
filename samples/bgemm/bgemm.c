@@ -34,12 +34,15 @@
 #if defined(LIBXSMM_OFFLOAD_TARGET)
 # pragma offload_attribute(push,target(LIBXSMM_OFFLOAD_TARGET))
 #endif
-#if defined(__MKL)
-# include <mkl_service.h>
-#endif
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#if defined(_OPENMP)
+# include <omp.h>
+#endif
+#if defined(__MKL)
+# include <mkl_service.h>
+#endif
 #if defined(LIBXSMM_OFFLOAD_TARGET)
 # pragma offload_attribute(pop)
 #endif
@@ -111,7 +114,12 @@ int main(int argc, char* argv[])
     libxsmm_bgemm_handle* handle = 0;
     unsigned long long start;
     double duration;
-    handle = libxsmm_bgemm_handle_create(
+#if defined(_OPENMP)
+    const int nthreads = omp_get_max_threads();
+#else
+    const int nthreads = 1;
+#endif
+    handle = libxsmm_bgemm_handle_create(nthreads,
       LIBXSMM_GEMM_PRECISION(ITYPE), LIBXSMM_GEMM_PRECISION(ITYPE),
       m, n, k, &bm, &bn, &bk, &b_m1, &b_n1, &b_k1, &b_k2,
       &alpha, &beta, &gemm_flags, NULL/*auto-prefetch*/, &order);
@@ -172,7 +180,8 @@ int main(int argc, char* argv[])
         if (0 != ctest) {
           libxsmm_matdiff_info diff;
           libxsmm_bgemm_copyout_c(handle, c, &ldc, ctest);
-          if (EXIT_SUCCESS == libxsmm_matdiff(LIBXSMM_DATATYPE(ITYPE), m, n, cgold, ctest, &ldc, &ldc, &diff)) {
+          result = libxsmm_matdiff(LIBXSMM_DATATYPE(ITYPE), m, n, cgold, ctest, &ldc, &ldc, &diff);
+          if (EXIT_SUCCESS == result) {
             fprintf(stdout, "\tdiff: L2abs=%f Linf=%f\n", diff.l2_abs, diff.linf_abs);
             if (check < 100.0 * diff.normf_rel) {
               fprintf(stderr, "FAILED with an error of %f%%!\n", 100.0 * diff.normf_rel);

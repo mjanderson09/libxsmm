@@ -36,7 +36,7 @@
 #define IFM_LOOP_FIRST_TOUCH 5
 #define IMG_LOOP_CLOSE 6
 
-#define LOCAL_ENTRIES_PER_CONV 7
+#define LOCAL_ENTRIES_PER_CONV 3
 
 #define MIXED 0
 #define KHWC 1
@@ -332,8 +332,8 @@ for (ltid = 0; ltid < handle->desc.threads; ltid++)
   handle->compute_fwd_indices_ptrs[ltid] = compute_indices;
 
   /* BN offsets...  */
-  if  (((handle->fuse_ops & LIBXSMM_DNN_CONV_FUSE_BATCH_STATS) > 0) && (handle->use_fwd_for_bwd == 0) && (handle->use_nts_fwd == 1) ) {
-    bn_indices = (int*) libxsmm_aligned_malloc( (local_entries/LOCAL_ENTRIES_PER_CONV) * sizeof(int), 64);
+  if  (((handle->fuse_ops & LIBXSMM_DNN_CONV_FUSE_BATCH_STATS) > 0) && (handle->use_fwd_for_bwd == 0) && (handle->use_nts_fwd == 1) && 0 != local_entries) {
+    bn_indices = (int*) libxsmm_aligned_malloc( (local_entries/3) * sizeof(int), 64);
     handle->bn_indices_ptrs[ltid] = bn_indices;
   }
 
@@ -426,28 +426,24 @@ for (ltid = 0; ltid < handle->desc.threads; ltid++)
                       }
                       compute_indices[local_entries+1] = ( (ofm1 *  BLOCKSIFM )  +  ifm1 ) * handle->desc.R * handle->desc.S *  handle->ifmblock *  handle->ofmblock *  handle->fm_lp_block;
                       compute_indices[local_entries+2] = ( ( ( ( ( (img *  BLOCKSOFM) +  ofm1) *  handle->ofhp )  +  oj_use) * handle->ofwp)  +  oi_use) *  handle->ofmblock;
-                      compute_indices[local_entries+3] =  ( ( ( ( ( (img *  BLOCKSIFM) +  ifm1) *  handle->ifhp )  +  ij_use) * handle->ifwp)  +  ii_use  ) *  handle->ifmblock * handle->fm_lp_block;
-                      compute_indices[local_entries+4] = oi;
-                      compute_indices[local_entries+5] = oj;
-                      compute_indices[local_entries+6] = ifm1;
 
                       /* Initialize kernel variant with the one that prefetches everything */
                       if (handle->n_variants == 2) {
                         if (handle->h_variants) {
                           if (oj + handle->fwd_ofh_rb <= handle->ofh) {
-                            kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] = (ifm_init_marked) ? 2 : 0;
+                            kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] =  0;
                           } else {
-                            kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] = (ifm_init_marked) ? 3 : 1;
+                            kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] =  1;
                           }
                         } else {
                           if (oi + handle->fwd_ofw_rb <= handle->ofw) {
-                            kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] = (ifm_init_marked) ? 2 : 0;
+                            kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] =  0;
                           } else {
-                            kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] = (ifm_init_marked) ? 3 : 1;
+                            kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] = 1;
                           }
                         }
                       } else {
-                        kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] = (ifm_init_marked) ? 2 : 0;
+                        kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] =  0;
 		      }
 
                       if (((handle->fuse_ops & LIBXSMM_DNN_CONV_FUSE_BATCH_STATS) > 0) && (handle->use_fwd_for_bwd == 0) && (handle->use_nts_fwd == 1) ) {
@@ -463,7 +459,6 @@ for (ltid = 0; ltid < handle->desc.threads; ltid++)
                         dbg_expanded_stream[tmp_stream_index].ci0 = compute_indices[local_entries + 0];
                         dbg_expanded_stream[tmp_stream_index].ci1 = compute_indices[local_entries + 1];
                         dbg_expanded_stream[tmp_stream_index].ci2 = compute_indices[local_entries + 2];
-                        dbg_expanded_stream[tmp_stream_index].ci3 = compute_indices[local_entries + 3];
 			dbg_expanded_stream[tmp_stream_index].fwd_ofh_rb = handle->fwd_ofh_rb;
 			dbg_expanded_stream[tmp_stream_index].fwd_ofw_rb = handle->fwd_ofw_rb;
 			dbg_expanded_stream[tmp_stream_index].bwd_ofh_rb = handle->bwd_ofh_rb;
@@ -580,28 +575,24 @@ for (ltid = 0; ltid < handle->desc.threads; ltid++)
                       }
                       compute_indices[local_entries+1] = ( (ofm1 *  BLOCKSIFM )  +  ifm1 ) * handle->desc.R * handle->desc.S *  handle->ifmblock *  handle->ofmblock *  handle->fm_lp_block;
                       compute_indices[local_entries+2] = ( ( ( ( ( (img *  BLOCKSOFM) +  ofm1) *  handle->ofhp )  +  oj_use) * handle->ofwp)  +  oi_use) *  handle->ofmblock;
-                      compute_indices[local_entries+3] =  ( ( ( ( ( (img *  BLOCKSIFM) +  ifm1) *  handle->ifhp )  +  ij_use) * handle->ifwp)  +  ii_use  ) *  handle->ifmblock * handle->fm_lp_block;
-                      compute_indices[local_entries+4] = oi;
-                      compute_indices[local_entries+5] = oj;
-                      compute_indices[local_entries+6] = ifm1;
 
                       /* Initialize kernel variant with the one that prefetches everything */
                       if (handle->n_variants == 2) {
                         if (handle->h_variants) {
                           if (oj + handle->fwd_ofh_rb <= handle->ofh) {
-                            kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] = (ifm_init_marked) ? 2 : 0;
+                            kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] =  0;
                           } else {
-                            kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] = (ifm_init_marked) ? 3 : 1;
+                            kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] =  1;
                           }
                         } else {
                           if (oi + handle->fwd_ofw_rb <= handle->ofw) {
-                            kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] = (ifm_init_marked) ? 2 : 0;
+                            kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] = 0;
                           } else {
-                            kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] = (ifm_init_marked) ? 3 : 1;
+                            kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] = 1;
                           }
                         }
                       } else {
-                        kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] = (ifm_init_marked) ? 2 : 0;
+                        kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] =  0;
 		      }
 
 
@@ -618,7 +609,6 @@ for (ltid = 0; ltid < handle->desc.threads; ltid++)
                         dbg_expanded_stream[tmp_stream_index].ci0 = compute_indices[local_entries + 0];
                         dbg_expanded_stream[tmp_stream_index].ci1 = compute_indices[local_entries + 1];
                         dbg_expanded_stream[tmp_stream_index].ci2 = compute_indices[local_entries + 2];
-                        dbg_expanded_stream[tmp_stream_index].ci3 = compute_indices[local_entries + 3];
 	                dbg_expanded_stream[tmp_stream_index].fwd_ofh_rb = handle->fwd_ofh_rb;
 	                dbg_expanded_stream[tmp_stream_index].fwd_ofw_rb = handle->fwd_ofw_rb;
 	                dbg_expanded_stream[tmp_stream_index].bwd_ofh_rb = handle->bwd_ofh_rb;
@@ -744,28 +734,24 @@ for (ltid = 0; ltid < handle->desc.threads; ltid++)
                     }
                     compute_indices[local_entries+1] = ( (ofm1 *  BLOCKSIFM )  +  ifm1 ) * handle->desc.R * handle->desc.S *  handle->ifmblock *  handle->ofmblock *  handle->fm_lp_block;
                     compute_indices[local_entries+2] = ( ( ( ( ( (img *  BLOCKSOFM) +  ofm1) *  handle->ofhp )  +  oj_use) * handle->ofwp)  +  oi_use  ) *  handle->ofmblock;
-                    compute_indices[local_entries+3] =  ( ( ( ( ( (img *  BLOCKSIFM) +  ifm1) *  handle->ifhp )  +  ij_use) * handle->ifwp)  +  ii_use  ) *  handle->ifmblock * handle->fm_lp_block;
-                    compute_indices[local_entries+4] =  oi;
-                    compute_indices[local_entries+5] =  oj;
-                    compute_indices[local_entries+6] = ifm1;
 
                     /* Initialize kernel variant with the one that prefetches everything */
                     if (handle->n_variants == 2) {
                       if (handle->h_variants) {
                         if (oj + handle->fwd_ofh_rb <= handle->ofh) {
-                          kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] = (ifm_init_marked) ? 2 : 0;
+                          kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] = 0;
                         } else {
-                          kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] = (ifm_init_marked) ? 3 : 1;
+                          kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] = 1;
                         }
                       } else {
                         if (oi + handle->fwd_ofw_rb <= handle->ofw) {
-                          kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] = (ifm_init_marked) ? 2 : 0;
+                          kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] = 0;
                         } else {
-                          kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] = (ifm_init_marked) ? 3 : 1;
+                          kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] = 1;
                         }
                       }
                     } else {
-                      kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] = (ifm_init_marked) ? 2 : 0;
+                      kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] = 0;
 		    }
 
                     if (((handle->fuse_ops & LIBXSMM_DNN_CONV_FUSE_BATCH_STATS) > 0) && (handle->use_fwd_for_bwd == 0) && (handle->use_nts_fwd == 1) ) {
@@ -781,7 +767,6 @@ for (ltid = 0; ltid < handle->desc.threads; ltid++)
                       dbg_expanded_stream[tmp_stream_index].ci0 = compute_indices[local_entries + 0];
                       dbg_expanded_stream[tmp_stream_index].ci1 = compute_indices[local_entries + 1];
                       dbg_expanded_stream[tmp_stream_index].ci2 = compute_indices[local_entries + 2];
-                      dbg_expanded_stream[tmp_stream_index].ci3 = compute_indices[local_entries + 3];
 	              dbg_expanded_stream[tmp_stream_index].fwd_ofh_rb = handle->fwd_ofh_rb;
 	              dbg_expanded_stream[tmp_stream_index].fwd_ofw_rb = handle->fwd_ofw_rb;
 	              dbg_expanded_stream[tmp_stream_index].bwd_ofh_rb = handle->bwd_ofh_rb;
@@ -1085,10 +1070,6 @@ if(INTERLEAVE_IFM_BN) {
   compute_indices[local_entries] = 0;
   compute_indices[local_entries+1] = 0;
   compute_indices[local_entries+2] = 0;
-  compute_indices[local_entries+3] = 0;
-  compute_indices[local_entries+4] = 0;
-  compute_indices[local_entries+5] = 0;
-  compute_indices[local_entries+6] = 0;
   total_calls = local_entries/LOCAL_ENTRIES_PER_CONV;
 
 }

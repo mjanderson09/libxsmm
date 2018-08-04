@@ -44,6 +44,10 @@
 # pragma offload_attribute(pop)
 #endif
 
+#if !defined(LIBXSMM_MAX_SPLITLIMIT)
+# define LIBXSMM_MAX_SPLITLIMIT 2048
+#endif
+
 
 LIBXSMM_API int libxsmm_matdiff(libxsmm_datatype datatype, libxsmm_blasint m, libxsmm_blasint n,
   const void* ref, const void* tst, const libxsmm_blasint* ldref, const libxsmm_blasint* ldtst,
@@ -56,40 +60,40 @@ LIBXSMM_API int libxsmm_matdiff(libxsmm_datatype datatype, libxsmm_blasint m, li
     if (1 == n) { mm = ldr = ldt = 1; nn = m; } /* ensure row-vector shape to standardize results */
     memset(info, 0, sizeof(*info)); /* nullify */
     switch (datatype) {
-    case LIBXSMM_DATATYPE_F64: {
+      case LIBXSMM_DATATYPE_F64: {
 #       define LIBXSMM_MATDIFF_TEMPLATE_ELEM_TYPE double
 #       include "template/libxsmm_matdiff.tpl.c"
 #       undef  LIBXSMM_MATDIFF_TEMPLATE_ELEM_TYPE
-    } break;
-    case LIBXSMM_DATATYPE_F32: {
+      } break;
+      case LIBXSMM_DATATYPE_F32: {
 #       define LIBXSMM_MATDIFF_TEMPLATE_ELEM_TYPE float
 #       include "template/libxsmm_matdiff.tpl.c"
 #       undef  LIBXSMM_MATDIFF_TEMPLATE_ELEM_TYPE
-    } break;
-    case LIBXSMM_DATATYPE_I32: {
+      } break;
+      case LIBXSMM_DATATYPE_I32: {
 #       define LIBXSMM_MATDIFF_TEMPLATE_ELEM_TYPE int
 #       include "template/libxsmm_matdiff.tpl.c"
 #       undef  LIBXSMM_MATDIFF_TEMPLATE_ELEM_TYPE
-    } break;
-    case LIBXSMM_DATATYPE_I16: {
+      } break;
+      case LIBXSMM_DATATYPE_I16: {
 #       define LIBXSMM_MATDIFF_TEMPLATE_ELEM_TYPE short
 #       include "template/libxsmm_matdiff.tpl.c"
 #       undef  LIBXSMM_MATDIFF_TEMPLATE_ELEM_TYPE
-    } break;
-    case LIBXSMM_DATATYPE_I8: {
+      } break;
+      case LIBXSMM_DATATYPE_I8: {
 #       define LIBXSMM_MATDIFF_TEMPLATE_ELEM_TYPE signed char
 #       include "template/libxsmm_matdiff.tpl.c"
 #       undef  LIBXSMM_MATDIFF_TEMPLATE_ELEM_TYPE
-    } break;
-    default: {
-      static int error_once = 0;
-      if (0 != libxsmm_verbosity /* library code is expected to be mute */
-        && 1 == LIBXSMM_ATOMIC_ADD_FETCH(&error_once, 1, LIBXSMM_ATOMIC_RELAXED))
-      {
-        fprintf(stderr, "LIBXSMM ERROR: unsupported data-type requested for libxsmm_matdiff!\n");
+      } break;
+      default: {
+        static int error_once = 0;
+        if (0 != libxsmm_verbosity /* library code is expected to be mute */
+          && 1 == LIBXSMM_ATOMIC_ADD_FETCH(&error_once, 1, LIBXSMM_ATOMIC_RELAXED))
+        {
+          fprintf(stderr, "LIBXSMM ERROR: unsupported data-type requested!\n");
+        }
+        result = EXIT_FAILURE;
       }
-      result = EXIT_FAILURE;
-    }
     }
   }
   else {
@@ -131,6 +135,105 @@ LIBXSMM_API void libxsmm_matdiff_reduce(libxsmm_matdiff_info* output, const libx
     output->l1_ref = input->l1_ref;
     output->l1_tst = input->l1_tst;
   }
+}
+
+
+LIBXSMM_API size_t libxsmm_gcd(size_t a, size_t b)
+{
+  while (0 != b) {
+    const size_t r = a % b;
+    a = b;
+    b = r;
+  }
+  return a;
+}
+
+
+LIBXSMM_API size_t libxsmm_lcm(size_t a, size_t b)
+{
+  return (a * b) / libxsmm_gcd(a, b);
+}
+
+
+LIBXSMM_API int libxsmm_primes_u32(unsigned int num, unsigned int num_factors_n32[])
+{
+  unsigned int c = num, i;
+  int n = 0;
+  if (0 < c && 0 == (c & 1)) { /* non-zero even */
+    unsigned int j = c / 2;
+    while (c == (2 * j)) {
+      num_factors_n32[n++] = 2;
+      c = j; j /= 2;
+    }
+  }
+  for (i = 3; i <= c; i += 2) {
+    unsigned int j = c / i;
+    while (c == (i * j)) {
+      num_factors_n32[n++] = i;
+      c = j; j /= i;
+    }
+    if ((i * i) > num) {
+      break;
+    }
+  }
+  if (1 < c && 0 != n) {
+    num_factors_n32[n++] = c;
+  }
+  return n;
+}
+
+
+LIBXSMM_API unsigned int libxsmm_split_work(unsigned int work, unsigned int split_limit)
+{
+  int result;
+  if (split_limit < work) {
+    result = 1;
+    if (1 < split_limit) {
+      unsigned int fact[32], wmax = split_limit;
+      int i;
+      /* attempt to lower the memory requirement for DP; can miss best solution */
+      if (LIBXSMM_MAX_SPLITLIMIT < split_limit) {
+        result = (unsigned int)libxsmm_gcd(work, split_limit);
+        wmax /= result;
+      }
+      if (LIBXSMM_MAX_SPLITLIMIT >= wmax) {
+        unsigned int k[2][LIBXSMM_MAX_SPLITLIMIT], w;
+        const int n = libxsmm_primes_u32(work / result, fact);
+        unsigned int *k0 = k[0], *k1 = k[1], *kt;
+        /* initialize table with trivial factor */
+        for (w = 0; w <= wmax; ++w) k[0][w] = 1;
+        k[0][0] = k[1][0] = 1;
+        for (i = 1; i <= n; ++i) {
+          for (w = 1; w <= wmax; ++w) {
+            const unsigned int f = fact[i-1], h = k0[w];
+            if (w < f) {
+              k1[w] = h;
+            }
+            else {
+              const unsigned int g = f * k0[w/f];
+              k1[w] = LIBXSMM_MAX(g, h);
+            }
+          }
+          kt = k0; k0 = k1; k1 = kt;
+        }
+        result *= k0[wmax];
+      }
+      else { /* trivial approximation */
+        const int n = libxsmm_primes_u32(work, fact);
+        for (i = 0; i < n; ++i) {
+          const unsigned int f = result * fact[i];
+          if (f <= split_limit) {
+            result = f;
+          }
+          else i = n; /* break */
+        }
+      }
+    }
+  }
+  else { /* fast-path */
+    result = work;
+  }
+  return result;
 }
 
 
@@ -385,7 +488,7 @@ LIBXSMM_API unsigned int libxsmm_rand_u32(unsigned int n)
 }
 
 
-LIBXSMM_API double libxsmm_rand_f64()
+LIBXSMM_API double libxsmm_rand_f64(void)
 {
 #if defined(_WIN32) || defined(__CYGWIN__) || !(defined(_SVID_SOURCE) || defined(_XOPEN_SOURCE))
   static const double scale = 1.0 / (RAND_MAX);

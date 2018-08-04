@@ -261,7 +261,7 @@
 #if defined(LIBXSMM_OPENMP_SIMD)
 # define LIBXSMM_PRAGMA_SIMD_REDUCTION(EXPRESSION) LIBXSMM_PRAGMA(omp simd reduction(EXPRESSION))
 # define LIBXSMM_PRAGMA_SIMD_COLLAPSE(N) LIBXSMM_PRAGMA(omp simd collapse(N))
-# define LIBXSMM_PRAGMA_SIMD_PRIVATE(...) LIBXSMM_PRAGMA(omp simd private(__VA_ARGS__))
+# define LIBXSMM_PRAGMA_SIMD_PRIVATE(A, ...) LIBXSMM_PRAGMA(omp simd private(A, __VA_ARGS__))
 # define LIBXSMM_PRAGMA_SIMD LIBXSMM_PRAGMA(omp simd)
 # if defined(__INTEL_COMPILER)
 #   define LIBXSMM_PRAGMA_NOVECTOR LIBXSMM_PRAGMA(novector)
@@ -271,13 +271,13 @@
 #elif defined(__INTEL_COMPILER)
 # define LIBXSMM_PRAGMA_SIMD_REDUCTION(EXPRESSION) LIBXSMM_PRAGMA(simd reduction(EXPRESSION))
 # define LIBXSMM_PRAGMA_SIMD_COLLAPSE(N) LIBXSMM_PRAGMA(simd collapse(N))
-# define LIBXSMM_PRAGMA_SIMD_PRIVATE(...) LIBXSMM_PRAGMA(simd private(__VA_ARGS__))
+# define LIBXSMM_PRAGMA_SIMD_PRIVATE(A, ...) LIBXSMM_PRAGMA(simd private(A, __VA_ARGS__))
 # define LIBXSMM_PRAGMA_SIMD LIBXSMM_PRAGMA(simd)
 # define LIBXSMM_PRAGMA_NOVECTOR LIBXSMM_PRAGMA(novector)
 #else
 # define LIBXSMM_PRAGMA_SIMD_REDUCTION(EXPRESSION)
 # define LIBXSMM_PRAGMA_SIMD_COLLAPSE(N)
-# define LIBXSMM_PRAGMA_SIMD_PRIVATE(...)
+# define LIBXSMM_PRAGMA_SIMD_PRIVATE(A, ...)
 # define LIBXSMM_PRAGMA_SIMD
 # define LIBXSMM_PRAGMA_NOVECTOR
 #endif
@@ -289,7 +289,7 @@
 #endif
 
 #if defined(__INTEL_COMPILER)
-# define LIBXSMM_PRAGMA_NONTEMPORAL_VARS(...) LIBXSMM_PRAGMA(vector nontemporal(__VA_ARGS__))
+# define LIBXSMM_PRAGMA_NONTEMPORAL_VARS(A, ...) LIBXSMM_PRAGMA(vector nontemporal(A, __VA_ARGS__))
 # define LIBXSMM_PRAGMA_NONTEMPORAL LIBXSMM_PRAGMA(vector nontemporal)
 # define LIBXSMM_PRAGMA_VALIGNED LIBXSMM_PRAGMA(vector aligned)
 # define LIBXSMM_PRAGMA_FORCEINLINE LIBXSMM_PRAGMA(forceinline)
@@ -297,16 +297,12 @@
 # define LIBXSMM_PRAGMA_UNROLL_AND_JAM(N) LIBXSMM_PRAGMA(unroll_and_jam(N))
 # define LIBXSMM_PRAGMA_UNROLL_N(N) LIBXSMM_PRAGMA(unroll(N))
 # define LIBXSMM_PRAGMA_UNROLL LIBXSMM_PRAGMA(unroll)
+# define LIBXSMM_PRAGMA_VALIGNED_VAR(A) LIBXSMM_ASSUME_ALIGNED(A, LIBXSMM_ALIGNMENT);
 /*# define LIBXSMM_UNUSED(VARIABLE) LIBXSMM_PRAGMA(unused(VARIABLE))*/
-# if (1500 <= __INTEL_COMPILER)
-#   define LIBXSMM_PRAGMA_VALIGNED_VARS(...) LIBXSMM_PRAGMA(vector aligned(__VA_ARGS__))
-# else /* avoid potential issue */
-#   define LIBXSMM_PRAGMA_VALIGNED_VARS(...)
-# endif
 #else
-# define LIBXSMM_PRAGMA_NONTEMPORAL_VARS(...)
+# define LIBXSMM_PRAGMA_NONTEMPORAL_VARS(A, ...)
 # define LIBXSMM_PRAGMA_NONTEMPORAL
-# define LIBXSMM_PRAGMA_VALIGNED_VARS(...)
+# define LIBXSMM_PRAGMA_VALIGNED_VAR(A)
 # define LIBXSMM_PRAGMA_VALIGNED
 # define LIBXSMM_PRAGMA_FORCEINLINE
 # define LIBXSMM_PRAGMA_LOOP_COUNT(MIN, MAX, AVG)
@@ -365,25 +361,31 @@
 #define LIBXSMM_DIV2(N, NPOT) (((unsigned long long)(N)) >> LIBXSMM_LOG2(NPOT))
 #define LIBXSMM_SQRT2(N) (0 < (N) ? ((unsigned int)(1ULL << (LIBXSMM_LOG2(((N) << 1) - 1) >> 1))) : 0)
 #define LIBXSMM_HASH2(N) ((((N) ^ ((N) >> 12)) ^ (((N) ^ ((N) >> 12)) << 25)) ^ ((((N) ^ ((N) >> 12)) ^ (((N) ^ ((N) >> 12)) << 25)) >> 27))
+#define LIBXSMM_SIZEOF(START, LAST) (((const char*)(LAST)) - ((const char*)(START)) + sizeof(*LAST))
 /** Compares floating point values but avoids warning about unreliable comparison. */
+#define LIBXSMM_NOTNAN(A) (LIBXSMM_NEQ(0, (A) - (A)) || 0 == ((int)((A) - (A))))
+#define LIBXSMM_ISNAN(A)  (!LIBXSMM_NOTNAN(A))
 #define LIBXSMM_NEQ(A, B) ((A) < (B) || (A) > (B))
 #define LIBXSMM_FEQ(A, B) (!LIBXSMM_NEQ(A, B))
 
-#define LIBXSMM_SIZEOF(START, LAST) (((const char*)(LAST)) - ((const char*)(START)) + sizeof(*LAST))
-#define LIBXSMM_DEFAULT(DEFAULT, VALUE) (0 < (VALUE) ? (VALUE) : (DEFAULT))
+#if defined(__INTEL_COMPILER)
+# if (1600 <= __INTEL_COMPILER)
+#   define LIBXSMM_ASSUME(EXPRESSION) __assume(EXPRESSION)
+# else
+#   define LIBXSMM_ASSUME(EXPRESSION) assert(EXPRESSION)
+# endif
+#elif defined(_MSC_VER)
+# define LIBXSMM_ASSUME(EXPRESSION) __assume(EXPRESSION)
+#elif defined(__GNUC__) && !defined(_CRAYC) && (LIBXSMM_VERSION3(4, 5, 0) <= LIBXSMM_VERSION3(__GNUC__, __GNUC_MINOR__, __GNUC_PATCHLEVEL__))
+# define LIBXSMM_ASSUME(EXPRESSION) do { if (!(EXPRESSION)) __builtin_unreachable(); } while(0)
+#else
+# define LIBXSMM_ASSUME(EXPRESSION) assert(EXPRESSION)
+#endif
 
 #if defined(__INTEL_COMPILER)
-# define LIBXSMM_ASSUME_ALIGNED(A, N) __assume_aligned(A, N);
-# define LIBXSMM_ASSUME(EXPRESSION) __assume(EXPRESSION);
+# define LIBXSMM_ASSUME_ALIGNED(A, N) __assume_aligned(A, N)
 #else
-# define LIBXSMM_ASSUME_ALIGNED(A, N)
-# if defined(_MSC_VER)
-#   define LIBXSMM_ASSUME(EXPRESSION) __assume(EXPRESSION);
-# elif (LIBXSMM_VERSION3(4, 5, 0) <= LIBXSMM_VERSION3(__GNUC__, __GNUC_MINOR__, __GNUC_PATCHLEVEL__))
-#   define LIBXSMM_ASSUME(EXPRESSION) do { if (!(EXPRESSION)) __builtin_unreachable(); } while(0);
-# else
-#   define LIBXSMM_ASSUME(EXPRESSION)
-# endif
+# define LIBXSMM_ASSUME_ALIGNED(A, N) assert(0 == ((uintptr_t)(A)) % (N))
 #endif
 #define LIBXSMM_ALIGN(POINTER, ALIGNMENT/*POT*/) ((POINTER) + (LIBXSMM_UP2((uintptr_t)(POINTER), ALIGNMENT) - ((uintptr_t)(POINTER))) / sizeof(*(POINTER)))
 #define LIBXSMM_FOLD2(POINTER, ALIGNMENT/*POT*/, NPOT) LIBXSMM_MOD2(LIBXSMM_DIV2((uintptr_t)(POINTER), ALIGNMENT), NPOT)
@@ -533,7 +535,7 @@
 
 /** Synchronize console output */
 #define LIBXSMM_STDIO_ACQUIRE() LIBXSMM_FLOCK(stdout); LIBXSMM_FLOCK(stderr)
-#define LIBXSMM_STDIO_RELEASE() LIBXSMM_FLOCK(stderr); LIBXSMM_FLOCK(stdout)
+#define LIBXSMM_STDIO_RELEASE() LIBXSMM_FUNLOCK(stderr); LIBXSMM_FUNLOCK(stdout)
 
 /** Determines whether constant-folding is available or not. */
 #if !defined(LIBXSMM_STRING_POOLING)
@@ -620,6 +622,13 @@
 #   define LIBXSMM_EXPECT(RESULT, EXPR) (EXPR)
 # else
 #   define LIBXSMM_EXPECT(RESULT, EXPR) LIBXSMM_ASSERT((RESULT) == (EXPR))
+# endif
+#endif
+#if !defined(LIBXSMM_EXPECT_NOT)
+# if defined(NDEBUG)
+#   define LIBXSMM_EXPECT_NOT(RESULT, EXPR) (EXPR)
+# else
+#   define LIBXSMM_EXPECT_NOT(RESULT, EXPR) LIBXSMM_ASSERT((RESULT) != (EXPR))
 # endif
 #endif
 #include <stddef.h>

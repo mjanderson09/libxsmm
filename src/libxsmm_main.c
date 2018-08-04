@@ -242,7 +242,8 @@ LIBXSMM_API_INLINE const char* internal_get_target_arch(int id)
       target_arch = "knl";
     } break;
     case LIBXSMM_X86_AVX512: {
-      target_arch = "avx3";
+      /* TODO: rework BE to use target ID instead of set of strings (target_arch = "avx3") */
+      target_arch = "hsw";
     } break;
     case LIBXSMM_X86_AVX2: {
       target_arch = "hsw";
@@ -251,7 +252,8 @@ LIBXSMM_API_INLINE const char* internal_get_target_arch(int id)
       target_arch = "snb";
     } break;
     case LIBXSMM_X86_SSE4: {
-      target_arch = "sse4";
+      /* TODO: rework BE to use target ID instead of set of strings (target_arch = "sse4") */
+      target_arch = "wsm";
     } break;
     case LIBXSMM_X86_SSE3: {
       /* WSM includes SSE4, but BE relies on SSE3 only,
@@ -705,7 +707,11 @@ LIBXSMM_API LIBXSMM_ATTRIBUTE_CTOR void libxsmm_init(void)
       LIBXSMM_LOCK_ATTR_DESTROY(LIBXSMM_LOCK, &attr_global);
       /* control number of locks needed; LIBXSMM_TRYLOCK implies only 1 lock */
       if (0 == env_trylock || 0 == *env_trylock) { /* no LIBXSMM_TRYLOCK */
+#if defined(LIBXSMM_VTUNE)
+        internal_reglock_count = 1; /* avoid duplicated kernels */
+#else
         internal_reglock_count = INTERNAL_REGLOCK_MAXN;
+#endif
       }
       else { /* LIBXSMM_TRYLOCK environment variable specified */
         internal_reglock_count = (0 != atoi(env_trylock) ? 1 : (INTERNAL_REGLOCK_MAXN));
@@ -760,22 +766,9 @@ LIBXSMM_API LIBXSMM_ATTRIBUTE_DTOR void libxsmm_finalize(void)
       libxsmm_kernel_info *const registry_keys = internal_registry_keys;
       internal_registry_nbytes = (LIBXSMM_CAPACITY_REGISTRY) * (sizeof(libxsmm_code_pointer) + sizeof(libxsmm_kernel_info));
 
-      /* serves as an id to invalidate the thread-local cache; never decremented */
+      /* serves as an ID to invalidate the thread-local cache; never decremented */
       ++internal_teardown;
-#if defined(LIBXSMM_TRACE)
-      i = libxsmm_trace_finalize();
-      if (EXIT_SUCCESS != i && 0 != libxsmm_verbosity) { /* library code is expected to be mute */
-        fprintf(stderr, "LIBXSMM ERROR: failed to finalize trace (error #%i)!\n", i);
-      }
-#endif
-      libxsmm_gemm_finalize();
-      libxsmm_gemm_diff_finalize();
-      libxsmm_trans_finalize();
-      libxsmm_hash_finalize();
-      libxsmm_dnn_finalize();
-#if defined(LIBXSMM_PERF)
-      libxsmm_perf_finalize();
-#endif
+
       for (i = 0; i < (LIBXSMM_CAPACITY_REGISTRY); ++i) {
         /*const*/ libxsmm_code_pointer code = registry[i];
         if (0 != code.ptr_const) {
@@ -825,6 +818,22 @@ LIBXSMM_API LIBXSMM_ATTRIBUTE_DTOR void libxsmm_finalize(void)
           }
         }
       }
+
+#if defined(LIBXSMM_TRACE)
+      i = libxsmm_trace_finalize();
+      if (EXIT_SUCCESS != i && 0 != libxsmm_verbosity) { /* library code is expected to be mute */
+        fprintf(stderr, "LIBXSMM ERROR: failed to finalize trace (error #%i)!\n", i);
+      }
+#endif
+      libxsmm_gemm_finalize();
+      libxsmm_gemm_diff_finalize();
+      libxsmm_trans_finalize();
+      libxsmm_hash_finalize();
+      libxsmm_dnn_finalize();
+#if defined(LIBXSMM_PERF)
+      libxsmm_perf_finalize();
+#endif
+
       /* make internal registry globally unavailable */
       LIBXSMM_ATOMIC(LIBXSMM_ATOMIC_STORE_ZERO, LIBXSMM_BITS)((uintptr_t*)regaddr, LIBXSMM_ATOMIC_SEQ_CST);
       internal_registry_keys = 0;
@@ -1034,6 +1043,46 @@ LIBXSMM_API_INTERN unsigned char libxsmm_typesize(libxsmm_datatype datatype)
     case LIBXSMM_DATATYPE_I8:   return 1;
   }
   return 0;
+}
+
+
+LIBXSMM_API_INTERN int libxsmm_dvalue(libxsmm_datatype datatype, const void* value, double* dvalue)
+{
+  int result = EXIT_SUCCESS;
+  if (NULL != value && NULL != dvalue) {
+    switch (datatype) {
+      case LIBXSMM_DATATYPE_F64: *dvalue =         (*(const double*)value); break;
+      case LIBXSMM_DATATYPE_F32: *dvalue = (double)(*(const float *)value); break;
+      case LIBXSMM_DATATYPE_I32: *dvalue = (double)(*(const int   *)value); break;
+      case LIBXSMM_DATATYPE_I16: *dvalue = (double)(*(const short *)value); break;
+      case LIBXSMM_DATATYPE_I8:  *dvalue = (double)(*(const char  *)value); break;
+      default: result = EXIT_FAILURE;
+    }
+  }
+  else {
+    result = EXIT_FAILURE;
+  }
+  return result;
+}
+
+
+LIBXSMM_API_INTERN int libxsmm_cast(libxsmm_datatype datatype, double dvalue, char value[])
+{
+  int result = EXIT_SUCCESS;
+  if (NULL != value) {
+    switch (datatype) {
+      case LIBXSMM_DATATYPE_F64: *(double     *)value =              dvalue; break;
+      case LIBXSMM_DATATYPE_F32: *(float      *)value =       (float)dvalue; break;
+      case LIBXSMM_DATATYPE_I32: *(int        *)value =         (int)dvalue; break;
+      case LIBXSMM_DATATYPE_I16: *(short      *)value =       (short)dvalue; break;
+      case LIBXSMM_DATATYPE_I8:  *(signed char*)value = (signed char)dvalue; break;
+      default: result = EXIT_FAILURE;
+    }
+  }
+  else {
+    result = EXIT_FAILURE;
+  }
+  return result;
 }
 
 
@@ -1405,10 +1454,7 @@ LIBXSMM_API_INTERN int libxsmm_build(const libxsmm_build_request* request, unsig
     } break;
     case LIBXSMM_BUILD_KIND_MCOPY: { /* matcopy kernel */
       assert(0 != request->descriptor.matcopy);
-      if (4 == request->descriptor.matcopy->typesize ||
-          2 == request->descriptor.matcopy->typesize ||
-          1 == request->descriptor.matcopy->typesize)
-      {
+      if (4 == request->descriptor.matcopy->typesize) {
         LIBXSMM_NO_OFFLOAD(void, libxsmm_generator_matcopy_kernel, &generated_code, request->descriptor.matcopy, target_arch);
 # if !defined(LIBXSMM_VTUNE)
         if (0 > libxsmm_verbosity)
@@ -1433,8 +1479,8 @@ LIBXSMM_API_INTERN int libxsmm_build(const libxsmm_build_request* request, unsig
         {
           const char *const tsizename = internal_get_typesize_string(request->descriptor.trans->typesize);
           /* adopt scheme which allows kernel names of LIBXSMM to appear in order (Intel VTune, etc.) */
-          LIBXSMM_SNPRINTF(jit_name, sizeof(jit_name), "libxsmm_%s_tsize%s_%ux%u.trans", target_arch, tsizename,
-            request->descriptor.trans->m, request->descriptor.trans->n);
+          LIBXSMM_SNPRINTF(jit_name, sizeof(jit_name), "libxsmm_%s_tsize%s_%ux%u_%u.trans", target_arch, tsizename,
+            request->descriptor.trans->m, request->descriptor.trans->n, request->descriptor.trans->ldo);
         }
       }
     } break;
@@ -1991,7 +2037,7 @@ LIBXSMM_API libxsmm_xtransfunction libxsmm_dispatch_trans(const libxsmm_trans_de
   libxsmm_xtransfunction result;
   if (0 != descriptor
     /* no need to double-check since initializing the descriptor was successful
-    && 0 != LIBXSMM_TRANS_NO_BYPASS_DIMS(descriptor->m, descriptor->n, descriptor->ldo)*/)
+    && 0 != LIBXSMM_TRANS_NO_BYPASS(descriptor->m, descriptor->n)*/)
   {
     libxsmm_kernel_info query;
     assert(LIBXSMM_SIZEOF(descriptor, &descriptor->typesize) < sizeof(query));

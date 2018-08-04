@@ -53,6 +53,7 @@ LIBXSMM_API_INTERN transposer get_transposer(int M, int N, int ldD, int ldS);
 LIBXSMM_API_INTERN libxsmm_dnn_err_t libxsmm_dnn_convolve_st_upd_custom_custom_f32_f32(libxsmm_dnn_layer* handle, int start_thread, int tid);
 LIBXSMM_API_INTERN libxsmm_dnn_err_t libxsmm_dnn_convolve_st_upd_custom_custom_i16_i32(libxsmm_dnn_layer* handle, int start_thread, int tid);
 LIBXSMM_API_INTERN libxsmm_dnn_err_t libxsmm_dnn_convolve_st_upd_custom_custom_i16_f32(libxsmm_dnn_layer* handle, int start_thread, int tid);
+LIBXSMM_API_INTERN libxsmm_dnn_err_t libxsmm_dnn_convolve_st_upd_custom_custom_bf16_bf16(libxsmm_dnn_layer* handle, int start_thread, int tid);
 LIBXSMM_API_INTERN libxsmm_dnn_err_t libxsmm_dnn_convolve_st_upd_custom_custom_i8_i32(libxsmm_dnn_layer* handle, int start_thread, int tid);
 
 #if defined(LIBXSMM_INTRINSICS_AVX512) /*__AVX512F__*/
@@ -186,7 +187,7 @@ void lp_transpose_input_and_output_vperm(int my_img_start, int my_img_end, libxs
       }
     }
     for (c_i = 0; c_i<mask_remainder; c_i++) {
-      mask[c_i] = (1 << 31);
+      mask[c_i] = (1U << 31);
     }
     for (c_i = mask_remainder; c_i<8; c_i++) {
       mask[c_i] = 0;
@@ -257,7 +258,7 @@ void lp_transpose_input_and_output_vperm(int my_img_start, int my_img_end, libxs
     int ij, ii, ofm1;
     int OFWP = handle->ofwp + handle->output_lp_padding;
     element_output_type *out = ((element_output_type*)handle->grad_output->data) + (handle->desc.pad_h_out * handle->ofwp + handle->desc.pad_w_out) * handle->ofmblock_lp * handle->fm_lp_block;
-    LIBXSMM_VLA_DECL(6, element_output_type, tr_output, (element_output_type*)handle->scratch6, handle->blocksofm, handle->ofhp, OFWP / 2, handle->ofmblock, 2);
+    LIBXSMM_VLA_DECL(6, element_output_type, tr_output, (element_output_type*)handle->scratch2, handle->blocksofm, handle->ofhp, OFWP / 2, handle->ofmblock, 2);
     LIBXSMM_VLA_DECL(6, element_output_type, output, out, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock_lp, handle->fm_lp_block);
 
     if (handle->ofwp % 2 == 0) {
@@ -350,7 +351,7 @@ void lp_transpose_input_and_output(int ltid, libxsmm_dnn_layer* handle)
       }
     }
     for (c_i=0; c_i<mask_remainder; c_i++) {
-      mask[c_i] = (1<<31);
+      mask[c_i] = (1U << 31);
     }
     for (c_i=mask_remainder; c_i<8; c_i++) {
       mask[c_i] = 0;
@@ -403,7 +404,7 @@ void lp_transpose_input_and_output(int ltid, libxsmm_dnn_layer* handle)
 
       /* Output transpose */
       element_output_type *out = ((element_output_type*)handle->grad_output->data) + (handle->desc.pad_h_out * handle->ofwp + handle->desc.pad_w_out) * handle->ofmblock_lp * handle->fm_lp_block;
-      LIBXSMM_VLA_DECL(6, element_output_type, tr_output,  (element_output_type*)handle->scratch6 , BLOCKSOFM, handle->ofhp, OFWP/2, handle->ofmblock, 2);
+      LIBXSMM_VLA_DECL(6, element_output_type, tr_output,  (element_output_type*)handle->scratch2 , BLOCKSOFM, handle->ofhp, OFWP/2, handle->ofmblock, 2);
       LIBXSMM_VLA_DECL(6, element_output_type, output, out, handle->blocksofm_lp, handle->ofhp, handle->ofwp, handle->ofmblock_lp, handle->fm_lp_block);
 
       for (img = my_img_start; img < my_img_end; img++) {
@@ -444,7 +445,7 @@ void lp_transpose_and_resize_input_and_output_vperm(int my_img_start, int my_img
     int OFWP = handle->ofwp + handle->output_lp_padding;
     element_output_type *out = ((element_output_type*)handle->grad_output->data) + (handle->desc.pad_h_out * handle->ofwp + handle->desc.pad_w_out) * handle->ofmblock_lp * handle->fm_lp_block;
     LIBXSMM_VLA_DECL(6, element_output_type, output, out, handle->blocksofm_lp, handle->ofhp, handle->ofwp, handle->ofmblock_lp, handle->fm_lp_block);
-    LIBXSMM_VLA_DECL(6, element_output_type, tr_output, (element_output_type*)handle->scratch6, handle->blocksofm, handle->ofhp, OFWP / 2, handle->ofmblock, 2);
+    LIBXSMM_VLA_DECL(6, element_output_type, tr_output, (element_output_type*)handle->scratch2, handle->blocksofm, handle->ofhp, OFWP / 2, handle->ofmblock, 2);
 
     if (handle->ofwp % 2 == 0) {
       for (img = my_img_start; img < my_img_end; img++) {
@@ -533,7 +534,7 @@ void lp_transpose_and_resize_input_and_output(int ltid, libxsmm_dnn_layer* handl
     }
   }
   for (c_i=0; c_i<mask_remainder; c_i++) {
-    mask[c_i] = (1<<31);
+    mask[c_i] = (1U << 31);
   }
   for (c_i=mask_remainder; c_i<8; c_i++) {
     mask[c_i] = 0;
@@ -595,7 +596,7 @@ void lp_transpose_and_resize_input_and_output(int ltid, libxsmm_dnn_layer* handl
 
     /* Output transpose */
     element_output_type *out = ((element_output_type*)handle->grad_output->data) + (handle->desc.pad_h_out * handle->ofwp + handle->desc.pad_w_out) * handle->ofmblock_lp * handle->fm_lp_block;
-    LIBXSMM_VLA_DECL(6, element_output_type, tr_output,  (element_output_type*)handle->scratch6 , BLOCKSOFM, handle->ofhp, OFWP/2, handle->ofmblock, 2);
+    LIBXSMM_VLA_DECL(6, element_output_type, tr_output,  (element_output_type*)handle->scratch2 , BLOCKSOFM, handle->ofhp, OFWP/2, handle->ofmblock, 2);
     LIBXSMM_VLA_DECL(6, element_output_type, output, out, handle->blocksofm_lp, handle->ofhp, handle->ofwp, handle->ofmblock_lp, handle->fm_lp_block);
 
     for (img = my_img_start; img < my_img_end; img++) {
@@ -1057,6 +1058,31 @@ libxsmm_dnn_err_t libxsmm_dnn_convolve_st_upd_custom_custom_i16_f32(libxsmm_dnn_
   return status;
 }
 
+LIBXSMM_API_INTERN LIBXSMM_INTRINSICS(LIBXSMM_X86_AVX512)
+libxsmm_dnn_err_t libxsmm_dnn_convolve_st_upd_custom_custom_bf16_bf16(libxsmm_dnn_layer* handle, int start_thread, int tid)
+{
+  libxsmm_dnn_err_t status = LIBXSMM_DNN_SUCCESS;
+#if defined(LIBXSMM_INTRINSICS_AVX512) /*__AVX512F__*/
+  if (handle->upd_use_thread_fil > 0) {
+    typedef libxsmm_bfloat16 element_input_type;
+    typedef libxsmm_bfloat16 element_output_type;
+    typedef float element_filter_type;
+    typedef libxsmm_bf16f32convfunction libxsmm_convfunction;
+    if (handle->use_fastpath) {
+      if ( handle->use_hybrid_wu_parallelism == 1) {
+# include "template/libxsmm_dnn_convolve_st_upd_custom_custom_stream_bf16.tpl.c"
+      }
+      else {
+# include "template/libxsmm_dnn_convolve_st_upd_custom_custom_stream_opt_bf16.tpl.c"
+      }
+    }
+  }
+#else /* should not happen */
+  LIBXSMM_UNUSED(handle); LIBXSMM_UNUSED(start_thread); LIBXSMM_UNUSED(tid);
+  status = LIBXSMM_DNN_ERR_UNSUPPORTED_ARCH;
+#endif
+  return status;
+}
 
 LIBXSMM_API_INTERN LIBXSMM_INTRINSICS(LIBXSMM_X86_AVX512)
 libxsmm_dnn_err_t libxsmm_dnn_convolve_st_upd_custom_custom_i8_i32(libxsmm_dnn_layer* handle, int start_thread, int tid)
@@ -1103,9 +1129,9 @@ LIBXSMM_API_INTERN libxsmm_dnn_err_t libxsmm_dnn_convolve_st_upd_custom_custom(l
   /* check if we have a kernel JITed */
   if ( handle->use_upd_generic != 0 ) {
     if (handle->datatype_in == LIBXSMM_DNN_DATATYPE_F32 && handle->datatype_out == LIBXSMM_DNN_DATATYPE_F32 ) {
-      const int ldx     = (int)(handle->desc.W+(2*handle->desc.pad_w));
-      const int ldx_alt = (int)(handle->desc.v*handle->ifmblock);
-      const int ldb_alt = (int)handle->ofwp;
+      const libxsmm_blasint ldx     = (libxsmm_blasint)(handle->desc.W+(2*handle->desc.pad_w));
+      const libxsmm_blasint ldx_alt = (libxsmm_blasint)(handle->desc.v*handle->ifmblock);
+      const libxsmm_blasint ldb_alt = (libxsmm_blasint)handle->ofwp;
       typedef float element_input_type;
       typedef float element_output_type;
       typedef float element_filter_type;
@@ -1126,6 +1152,9 @@ LIBXSMM_API_INTERN libxsmm_dnn_err_t libxsmm_dnn_convolve_st_upd_custom_custom(l
   else {
     if (handle->datatype_in == LIBXSMM_DNN_DATATYPE_F32 && handle->datatype_out == LIBXSMM_DNN_DATATYPE_F32 ) {
       status = libxsmm_dnn_convolve_st_upd_custom_custom_f32_f32( handle, start_thread, tid );
+    }
+    else if (handle->datatype_in == LIBXSMM_DNN_DATATYPE_BF16 && handle->datatype_out == LIBXSMM_DNN_DATATYPE_BF16 ) {
+      status = libxsmm_dnn_convolve_st_upd_custom_custom_bf16_bf16( handle, start_thread, tid );
     }
     else if (handle->datatype_in == LIBXSMM_DNN_DATATYPE_I16 && handle->datatype_out == LIBXSMM_DNN_DATATYPE_F32 ) {
       status = libxsmm_dnn_convolve_st_upd_custom_custom_i16_f32( handle, start_thread, tid );
@@ -1156,13 +1185,13 @@ LIBXSMM_API_INTERN libxsmm_dnn_err_t libxsmm_dnn_convolve_st_upd_nhwc_custom(lib
   /* check if we have a kernel JITed */
   if ( handle->use_upd_generic != 0 ) {
     if (handle->datatype_in == LIBXSMM_DNN_DATATYPE_F32 && handle->datatype_out == LIBXSMM_DNN_DATATYPE_F32 ) {
-      const int lda     = (int)(handle->blocksofm*handle->ofmblock);
-      const int ldb     = (int)(handle->desc.W+(2*handle->desc.pad_w));
-      const int ldc     = (int)(handle->ofmblock);
-      const int lda_alt = ( (handle->desc.pad_h == handle->desc.pad_h_in) && (handle->desc.pad_w == handle->desc.pad_w_in) )
-                            ? (int)(handle->desc.v*handle->blocksifm*handle->ifmblock) : (int)(handle->desc.v*handle->ifmblock);
-      const int ldb_alt = (int)(handle->ofwp);
-      const int ldc_alt = (int)(handle->ifmblock);
+      const libxsmm_blasint lda     = (libxsmm_blasint)(handle->blocksofm*handle->ofmblock);
+      const libxsmm_blasint ldb     = (libxsmm_blasint)(handle->desc.W+(2*handle->desc.pad_w));
+      const libxsmm_blasint ldc     = (libxsmm_blasint)(handle->ofmblock);
+      const libxsmm_blasint lda_alt = (libxsmm_blasint)((handle->desc.pad_h == handle->desc.pad_h_in && handle->desc.pad_w == handle->desc.pad_w_in)
+                            ? (handle->desc.v*handle->blocksifm*handle->ifmblock) : (handle->desc.v*handle->ifmblock));
+      const libxsmm_blasint ldb_alt = (libxsmm_blasint)(handle->ofwp);
+      const libxsmm_blasint ldc_alt = (libxsmm_blasint)(handle->ifmblock);
       typedef float element_input_type;
       typedef float element_output_type;
       typedef float element_filter_type;
@@ -1203,13 +1232,13 @@ LIBXSMM_API_INTERN libxsmm_dnn_err_t libxsmm_dnn_convolve_st_upd_nhwc_rsck(libxs
   /* check if we have a kernel JITed */
   if ( handle->use_upd_generic != 0 ) {
     if (handle->datatype_in == LIBXSMM_DNN_DATATYPE_F32 && handle->datatype_out == LIBXSMM_DNN_DATATYPE_F32 ) {
-      const int lda     = (int)(handle->blocksofm*handle->ofmblock);
-      const int ldb     = (int)(handle->desc.W+(2*handle->desc.pad_w));
-      const int ldc     = (int)(handle->blocksofm*handle->ofmblock);
-      const int lda_alt = ( (handle->desc.pad_h == handle->desc.pad_h_in) && (handle->desc.pad_w == handle->desc.pad_w_in) )
-                            ? (int)(handle->desc.v*handle->blocksifm*handle->ifmblock) : (int)(handle->desc.v*handle->ifmblock);
-      const int ldb_alt = (int)(handle->ofwp);
-      const int ldc_alt = (int)(handle->ifmblock);
+      const libxsmm_blasint lda     = (libxsmm_blasint)(handle->blocksofm*handle->ofmblock);
+      const libxsmm_blasint ldb     = (libxsmm_blasint)(handle->desc.W+(2*handle->desc.pad_w));
+      const libxsmm_blasint ldc     = (libxsmm_blasint)(handle->blocksofm*handle->ofmblock);
+      const libxsmm_blasint lda_alt = (libxsmm_blasint)((handle->desc.pad_h == handle->desc.pad_h_in && handle->desc.pad_w == handle->desc.pad_w_in)
+                            ? (handle->desc.v*handle->blocksifm*handle->ifmblock) : (handle->desc.v*handle->ifmblock));
+      const libxsmm_blasint ldb_alt = (libxsmm_blasint)(handle->ofwp);
+      const libxsmm_blasint ldc_alt = (libxsmm_blasint)(handle->ifmblock);
       typedef float element_input_type;
       typedef float element_output_type;
       typedef float element_filter_type;
