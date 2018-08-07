@@ -766,7 +766,185 @@ void libxsmm_generator_convolution_forward_avx512_ifmloop_one_row( libxsmm_gener
         + (l_n * i_conv_kernel_config->datatype_size_in * i_conv_desc->stride_w * i_conv_kernel_config->l_ld_ifm_act * i_conv_desc->fm_lp_block);
 
       if (step_size == 1) {
+
         if ( i_conv_desc->datatype == LIBXSMM_DNN_DATATYPE_F32 && i_conv_desc->datatype_itm == LIBXSMM_DNN_DATATYPE_F32 ) {
+          if (i_conv_desc->jit_fuse_bn == 1) {
+            if (l_k == 0) {
+              int expect_rsp_offset;
+              int stdev_rsp_offset;
+              int gamma_rsp_offset;
+              int beta_rsp_offset;
+              int myinput_st_rsp_offset;
+              int myinput_left_rsp_offset;                 
+              if (i_conv_desc->compute_batch_stats > 0) {
+                expect_rsp_offset = 80; 
+              } else {
+                expect_rsp_offset = 64;
+              }
+              stdev_rsp_offset = expect_rsp_offset + 8;
+              gamma_rsp_offset = expect_rsp_offset + 16;
+              beta_rsp_offset = expect_rsp_offset +24;
+              myinput_st_rsp_offset = expect_rsp_offset + 32;
+              myinput_left_rsp_offset = expect_rsp_offset + 40;
+
+              unsigned int myinput_st_base_reg = LIBXSMM_X86_GP_REG_R12;
+              unsigned int myinput_left_base_reg = LIBXSMM_X86_GP_REG_R12;
+
+              /* Load input CL to zmm1  */
+              libxsmm_x86_instruction_vec_move( io_generated_code,
+                  i_conv_kernel_config->instruction_set,
+                  i_conv_kernel_config->vmove_instruction,
+                  i_gp_reg_mapping->gp_reg_input,
+                  LIBXSMM_X86_GP_REG_UNDEF, 0,
+                  l_disp,
+                  i_conv_kernel_config->vector_name, 1,
+                  0, 0);
+
+              if (i_conv_desc->jit_fuse_batch_norm_fwd) {
+                libxsmm_x86_instruction_alu_mem( io_generated_code,
+                    i_conv_kernel_config->alu_mov_instruction,
+                    LIBXSMM_X86_GP_REG_RSP,
+                    LIBXSMM_X86_GP_REG_UNDEF, 0,
+                    myinput_st_rsp_offset,
+                    myinput_st_base_reg,
+                    0 );
+
+                /* SS zmm1 to "myinput_st" buffer */
+                libxsmm_x86_instruction_vec_move( io_generated_code,
+                    i_conv_kernel_config->instruction_set,
+                    LIBXSMM_X86_INSTR_VMOVNTPS,
+                    myinput_st_base_reg,
+                    LIBXSMM_X86_GP_REG_UNDEF, 0,
+                    l_disp,
+                    i_conv_kernel_config->vector_name, 1,
+                    0, 1);
+
+                /* Apply BN  */
+                /* zmm1 =  SUB zmm1, "expect" */
+                libxsmm_x86_instruction_vec_compute_mem( io_generated_code,
+                    i_conv_kernel_config->instruction_set,
+                    LIBXSMM_X86_INSTR_VSUBPS,
+                    0,
+                    LIBXSMM_X86_GP_REG_RSP,
+                    LIBXSMM_X86_GP_REG_UNDEF, 0,
+                    expect_rsp_offset,
+                    i_conv_kernel_config->vector_name,
+                    1,
+                    1);
+
+                /* zmm1 =  MUL zmm1, "stdev" */
+                libxsmm_x86_instruction_vec_compute_mem( io_generated_code,
+                    i_conv_kernel_config->instruction_set,
+                    LIBXSMM_X86_INSTR_VMULPS,
+                    0,
+                    LIBXSMM_X86_GP_REG_RSP,
+                    LIBXSMM_X86_GP_REG_UNDEF, 0,
+                    stdev_rsp_offset,
+                    i_conv_kernel_config->vector_name,
+                    1,
+                    1);            
+
+                /* zmm1 = MUL zmm1, "gamma" */
+                libxsmm_x86_instruction_vec_compute_mem( io_generated_code,
+                    i_conv_kernel_config->instruction_set,
+                    LIBXSMM_X86_INSTR_VMULPS,
+                    0,
+                    LIBXSMM_X86_GP_REG_RSP,
+                    LIBXSMM_X86_GP_REG_UNDEF, 0,
+                    gamma_rsp_offset,
+                    i_conv_kernel_config->vector_name,
+                    1,
+                    1);               
+
+                /* zmm1 = ADD zmm1, "beta" */
+                libxsmm_x86_instruction_vec_compute_mem( io_generated_code,
+                    i_conv_kernel_config->instruction_set,
+                    LIBXSMM_X86_INSTR_VADDPS,
+                    0,
+                    LIBXSMM_X86_GP_REG_RSP,
+                    LIBXSMM_X86_GP_REG_UNDEF, 0,
+                    beta_rsp_offset,
+                    i_conv_kernel_config->vector_name,
+                    1,
+                    1);  
+              }             
+
+              /* IF (ELEMENTWISE) zmm1 = ADD zmm1, "input_left" */
+              if (i_conv_desc->jit_fuse_elementwise_fwd) {
+                libxsmm_x86_instruction_alu_mem( io_generated_code,
+                    i_conv_kernel_config->alu_mov_instruction,
+                    LIBXSMM_X86_GP_REG_RSP,
+                    LIBXSMM_X86_GP_REG_UNDEF, 0,
+                    myinput_left_rsp_offset,
+                    myinput_left_base_reg,
+                    0 );
+
+                /* Load my_input "left" buffer in zmm2 */
+                libxsmm_x86_instruction_vec_move( io_generated_code,
+                    i_conv_kernel_config->instruction_set,
+                    i_conv_kernel_config->vmove_instruction,
+                    myinput_left_base_reg,
+                    LIBXSMM_X86_GP_REG_UNDEF, 0,
+                    l_disp,
+                    i_conv_kernel_config->vector_name, 2,
+                    0, 0);
+
+                libxsmm_x86_instruction_vec_compute_reg( io_generated_code,
+                    i_conv_kernel_config->instruction_set,
+                    LIBXSMM_X86_INSTR_VADDPS,
+                    i_conv_kernel_config->vector_name,
+                    1,
+                    2,
+                    1);
+              } 
+
+              /* Apply relu */
+              if (i_conv_desc->jit_fuse_batch_norm_relu_fwd) {
+                /* Zero out zmm2 */
+                libxsmm_x86_instruction_vec_compute_reg( io_generated_code,
+                    i_conv_kernel_config->instruction_set,
+                    i_conv_kernel_config->vxor_instruction,
+                    i_conv_kernel_config->vector_name,
+                    2,
+                    2,
+                    2);
+
+                /* Create mask1 based on comparison */
+                libxsmm_x86_instruction_vec_compute_reg_mask( io_generated_code,
+                    i_conv_kernel_config->instruction_set,
+                    LIBXSMM_X86_INSTR_VCMPPS,
+                    'z',
+                    1,
+                    2,
+                    1,
+                    1,
+                    1);
+
+                /* zmm1 = BLEND(mask1, zmm2, zmm1)  */
+                libxsmm_x86_instruction_vec_compute_reg_mask( io_generated_code,
+                    i_conv_kernel_config->instruction_set,
+                    LIBXSMM_X86_INSTR_VBLENDMPS,
+                    i_conv_kernel_config->vector_name,
+                    1,
+                    2,
+                    1,
+                    LIBXSMM_X86_IMM_UNDEF,
+                    1);
+              }
+
+              /* Store zmm1 to myinput buffer  */
+              libxsmm_x86_instruction_vec_move( io_generated_code,
+                  i_conv_kernel_config->instruction_set,
+                  i_conv_kernel_config->vmove_instruction,
+                  i_gp_reg_mapping->gp_reg_input,
+                  LIBXSMM_X86_GP_REG_UNDEF, 0,
+                  l_disp,
+                  i_conv_kernel_config->vector_name, 1,
+                  0, 1);
+
+            }
+          }
+
           libxsmm_x86_instruction_vec_compute_mem( io_generated_code,
               i_conv_kernel_config->instruction_set,
               i_conv_kernel_config->vfma_instruction,
@@ -1182,6 +1360,8 @@ void libxsmm_generator_convolution_forward_avx512_ifmloop_two_rows( libxsmm_gene
 
         if (step_size == 1) {
           if ( i_conv_desc->datatype == LIBXSMM_DNN_DATATYPE_F32 && i_conv_desc->datatype_itm == LIBXSMM_DNN_DATATYPE_F32 ) {
+            /* TODO EVANGELOS: ADD BN STUFF HERE IF l_k == 0 */
+
             libxsmm_x86_instruction_vec_compute_mem( io_generated_code,
                 i_conv_kernel_config->instruction_set,
                 i_conv_kernel_config->vfma_instruction,
@@ -1579,6 +1759,8 @@ void libxsmm_generator_convolution_forward_avx512_ifmloop_qfma_x_rows( libxsmm_g
 
         if (step_size == 1) {
           if ( i_conv_desc->datatype == LIBXSMM_DNN_DATATYPE_F32 && i_conv_desc->datatype_itm == LIBXSMM_DNN_DATATYPE_F32 ) {
+            /* TODO EVANGELOS: ADD BN STUFF HERE IF l_k == 0 */
+
             libxsmm_x86_instruction_vec_compute_mem( io_generated_code,
                 i_conv_kernel_config->instruction_set,
                 i_conv_kernel_config->vfma_instruction,
@@ -1590,6 +1772,7 @@ void libxsmm_generator_convolution_forward_avx512_ifmloop_qfma_x_rows( libxsmm_g
                 i_conv_kernel_config->vector_name,
                 0,
                 i_conv_kernel_config->vector_reg_count - (i_conv_desc->ofw_rb*i_x_rows) + l_n + (l_m*i_conv_desc->ofw_rb) );
+
           } else if ( (i_conv_desc->datatype == LIBXSMM_DNN_DATATYPE_I16 && i_conv_desc->datatype_itm == LIBXSMM_DNN_DATATYPE_I32) ||
               (i_conv_desc->datatype == LIBXSMM_DNN_DATATYPE_I16 && i_conv_desc->datatype_itm == LIBXSMM_DNN_DATATYPE_F32)    ) {
             if ( i_conv_kernel_config->instruction_set == LIBXSMM_X86_AVX512_CORE ) {
