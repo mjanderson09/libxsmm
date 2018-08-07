@@ -44,15 +44,14 @@
 #define CHWK 3
 #define HWCK 4
 
-int INTERLEAVE_IFM_BN = 1;
+int IMG_INIT_BATCH_NORM = ((handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_NAIVE) > 0);
+int IFM_INIT_BATCH_NORM = ((handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_IFM) > 0);
+int INTERLEAVED_BATCH_NORM = ((handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_KERNEL) > 0);
+
+/* Interleaved is only for 1x1 */
 if(handle->desc.R != 1 || handle->desc.S != 1) 
 {
-  INTERLEAVE_IFM_BN = 0;
-}
-
-if(handle->desc.H <= 14 && handle->desc.W <= 14)
-{
-  INTERLEAVE_IFM_BN = 0;
+  assert(INTERLEAVED_BATCH_NORM != 1);
 }
 
 const char * get_segment_type(int segment_type)
@@ -190,11 +189,12 @@ for (ltid = 0; ltid < handle->desc.threads; ltid++)
                       local_entries += LOCAL_ENTRIES_PER_CONV;
 
                       if (mark_ifm_init == 1) {
-		        if((INTERLEAVE_IFM_BN == 1 && ofmb == my_ofm_start && ofm1 == ofmb) || (ofmb == my_ofm_start && ojb == 0 && ofm1 == ofmb && oj == ojb && oi == 0))
-			{
+		                if((INTERLEAVED_BATCH_NORM == 1 && ofmb == my_ofm_start && ofm1 == ofmb) || 
+						   (IFM_INIT_BATCH_NORM == 1 && ofmb == my_ofm_start && ojb == 0 && ofm1 == ofmb && oj == ojb && oi == 0))
+			            {
                           n_code_segments++;
-			}
-		      }
+			            }
+		              }
 
                       if (mark_ofm_init == 1) {
                         if (ifm1 == 0 && oj == 0 && oi == 0) {
@@ -233,9 +233,10 @@ for (ltid = 0; ltid < handle->desc.threads; ltid++)
                     for (ifm1 = ifmb; ifm1 < LIBXSMM_MIN(ifmb+handle->block_fwd_ifm, BLOCKSIFM); ifm1 += BLOCKSIFM_BLOCKING) {
                       local_entries += LOCAL_ENTRIES_PER_CONV;
                       if (mark_ifm_init == 1) {
-		        if ((INTERLEAVE_IFM_BN == 1 && ofmb == my_ofm_start && ofm1 == ofmb) || (ofmb == my_ofm_start && ojb == 0 && ofm1 == ofmb && oj == ojb && oi == 0)) {
+		                if ((INTERLEAVED_BATCH_NORM == 1 && ofmb == my_ofm_start && ofm1 == ofmb) || 
+						    (IFM_INIT_BATCH_NORM == 1 && ofmb == my_ofm_start && ojb == 0 && ofm1 == ofmb && oj == ojb && oi == 0)) {
                           n_code_segments++;
-			}
+			            }
                       }
 
                       if (mark_ofm_init == 1) {
@@ -287,10 +288,11 @@ for (ltid = 0; ltid < handle->desc.threads; ltid++)
                     local_entries += LOCAL_ENTRIES_PER_CONV;
 
                     if (mark_ifm_init == 1) {
-	              if((INTERLEAVE_IFM_BN == 1 && ofmb == my_ofm_start && ofm1 == ofmb) || (ofmb == my_ofm_start && ojb == 0 && oj == ojb && oi == 0 && ofm1 == ofmb))
-		      {
+	                  if((INTERLEAVED_BATCH_NORM == 1 && ofmb == my_ofm_start && ofm1 == ofmb) || 
+					     (IFM_INIT_BATCH_NORM == 1 && ofmb == my_ofm_start && ojb == 0 && oj == ojb && oi == 0 && ofm1 == ofmb))
+		              {
                         n_code_segments++;
-		      }
+		              }
                     }
                     if (mark_ofm_init == 1) {
                       if (ifm1 == 0 && oj == 0 && oi == 0) {
@@ -388,10 +390,10 @@ for (ltid = 0; ltid < handle->desc.threads; ltid++)
                         oj_use = oj * handle->desc.v;
                       }
 
-		      int ifm_init_marked = (mark_ifm_init == 1) && (ofmb == my_ofm_start && ofm1 == ofmb);
 		      if(mark_ifm_init == 1)
 		      {
-		        if((INTERLEAVE_IFM_BN == 1 && ofmb == my_ofm_start && ofm1 == ofmb) || (ofmb == my_ofm_start && ojb == 0 && ofm1 == ofmb && oj == ojb && oi == 0)) {
+		        if((INTERLEAVED_BATCH_NORM == 1 && ofmb == my_ofm_start && ofm1 == ofmb) || 
+				   (IFM_INIT_BATCH_NORM == 1 && ofmb == my_ofm_start && ojb == 0 && ofm1 == ofmb && oj == ojb && oi == 0)) {
                           tmp_expanded_stream[tmp_stream_index] = IFM_LOOP_FIRST_TOUCH;
                           dbg_expanded_stream[tmp_stream_index].segment_type = IFM_LOOP_FIRST_TOUCH;
                           dbg_expanded_stream[tmp_stream_index].loop_order= MIXED;
@@ -536,10 +538,10 @@ for (ltid = 0; ltid < handle->desc.threads; ltid++)
                         oj_use = oj * handle->desc.v;
                       }
 
-		      int ifm_init_marked = (mark_ifm_init == 1) && (ofmb == my_ofm_start && ofm1 == ofmb);
 		      if(mark_ifm_init == 1)
 		      {
-		        if((INTERLEAVE_IFM_BN == 1 && ofmb == my_ofm_start && ofm1 == ofmb) || (ofmb == my_ofm_start && ojb == 0 && ofm1 == ofmb && oj == ojb && oi == 0)) {
+		        if((INTERLEAVED_BATCH_NORM == 1 && ofmb == my_ofm_start && ofm1 == ofmb) || 
+				   (IFM_INIT_BATCH_NORM == 1 && ofmb == my_ofm_start && ojb == 0 && ofm1 == ofmb && oj == ojb && oi == 0)) {
                           tmp_expanded_stream[tmp_stream_index] = IFM_LOOP_FIRST_TOUCH;
                           dbg_expanded_stream[tmp_stream_index].segment_type = IFM_LOOP_FIRST_TOUCH;
                           dbg_expanded_stream[tmp_stream_index].loop_order= MIXED;
@@ -551,8 +553,8 @@ for (ltid = 0; ltid < handle->desc.threads; ltid++)
                           dbg_expanded_stream[tmp_stream_index].ifmb=ifmb;
                           dbg_expanded_stream[tmp_stream_index].ifm1=ifm1;
                           tmp_stream_index++;
-			}
-		      }
+			            }
+		              }
 
                       if (0 != tmp_expanded_stream && mark_ofm_init == 1 && ifm1 == 0 && oj == 0 && oi == 0) {
                         tmp_expanded_stream[tmp_stream_index] = OFM_LOOP_INIT;
@@ -696,10 +698,10 @@ for (ltid = 0; ltid < handle->desc.threads; ltid++)
                       oj_use = oj * handle->desc.v;
                     }
 
-		    int ifm_init_marked = (mark_ifm_init == 1) && (ofmb == my_ofm_start && ofm1 == ofmb);
 		    if(mark_ifm_init == 1)
 		    {
-		      if((INTERLEAVE_IFM_BN == 1 && ofmb == my_ofm_start && ofm1 == ofmb) || (ofmb == my_ofm_start && ojb == 0 && oj == ojb && oi == 0 && ofm1 == ofmb)) {
+		      if((INTERLEAVED_BATCH_NORM == 1 && ofmb == my_ofm_start && ofm1 == ofmb) || 
+			     (IFM_INIT_BATCH_NORM == 1 && ofmb == my_ofm_start && ojb == 0 && oj == ojb && oi == 0 && ofm1 == ofmb)) {
                         tmp_expanded_stream[tmp_stream_index] = IFM_LOOP_FIRST_TOUCH;
                         dbg_expanded_stream[tmp_stream_index].segment_type = IFM_LOOP_FIRST_TOUCH;
                         dbg_expanded_stream[tmp_stream_index].loop_order= HWKC;
@@ -870,6 +872,20 @@ for (ltid = 0; ltid < handle->desc.threads; ltid++)
         for (img = my_img_start; img < my_img_end; img++) {
           if (mark_img_init== 1) {
             encoded_code_segments[encoded_stream_index].aux_index = img;
+			if(IMG_INIT_BATCH_NORM)
+			{
+              encoded_code_segments[encoded_stream_index].aux_index0 = 0;
+              encoded_code_segments[encoded_stream_index].aux_index1 = 0;
+              encoded_code_segments[encoded_stream_index].aux_index2 = handle->desc.H;
+              encoded_code_segments[encoded_stream_index].aux_index3 = handle->desc.W;
+			}
+			else
+			{
+              encoded_code_segments[encoded_stream_index].aux_index0 = 0;
+              encoded_code_segments[encoded_stream_index].aux_index1 = 0;
+              encoded_code_segments[encoded_stream_index].aux_index2 = 0;
+              encoded_code_segments[encoded_stream_index].aux_index3 = 0;
+			}
             encoded_stream_index++;
           }
           for (ofmb = my_ofm_start; ofmb < my_ofm_end; ofmb += handle->block_fwd_ofm) {
@@ -884,22 +900,27 @@ for (ltid = 0; ltid < handle->desc.threads; ltid++)
                         ii = oi * handle->desc.v;
 
                         if (mark_ifm_init == 1) {
-			  if((INTERLEAVE_IFM_BN == 1 && ofmb == my_ofm_start && ofm1 == ofmb) || (ofmb == my_ofm_start && ojb == 0 && ofm1 == ofmb && oj == ojb && oi == 0)) {
-                            encoded_code_segments[encoded_stream_index].aux_index = ifm1;
-if(INTERLEAVE_IFM_BN) {
-                            encoded_code_segments[encoded_stream_index].aux_index0 = ij;
-                            encoded_code_segments[encoded_stream_index].aux_index1 = ii;
-                            encoded_code_segments[encoded_stream_index].aux_index2 = ij + handle->fwd_ofh_rb * handle->desc.u;
-                            encoded_code_segments[encoded_stream_index].aux_index3 = ii + handle->fwd_ofw_rb * handle->desc.v;
-} else {
-                            encoded_code_segments[encoded_stream_index].aux_index0 = 0;
-                            encoded_code_segments[encoded_stream_index].aux_index1 = 0;
-                            encoded_code_segments[encoded_stream_index].aux_index2 = handle->desc.H;
-                            encoded_code_segments[encoded_stream_index].aux_index3 = handle->desc.W;
-}
-                            encoded_stream_index++; // Assume BLOCKSIFM 
-		          }
-		        }
+                            if(INTERLEAVED_BATCH_NORM == 1 && ofmb == my_ofm_start && ofm1 == ofmb) {
+                              encoded_code_segments[encoded_stream_index].aux_index = ifm1;
+                              encoded_code_segments[encoded_stream_index].aux_index0 = ij;
+                              encoded_code_segments[encoded_stream_index].aux_index1 = ii;
+							  if(oj + handle->fwd_ofh_rb <= handle->ofh) {
+                                encoded_code_segments[encoded_stream_index].aux_index2 = ij + handle->fwd_ofh_rb * handle->desc.u;
+                                encoded_code_segments[encoded_stream_index].aux_index3 = ii + handle->fwd_ofw_rb * handle->desc.v;
+							  } else {
+                                encoded_code_segments[encoded_stream_index].aux_index2 = ij + handle->fwd_ofh_rb_2 * handle->desc.u;
+                                encoded_code_segments[encoded_stream_index].aux_index3 = ii + handle->fwd_ofw_rb_2 * handle->desc.v;
+							  }
+                              encoded_stream_index++; // Assume BLOCKSIFM 
+                            } else if(IFM_INIT_BATCH_NORM == 1 && ofmb == my_ofm_start && ojb == 0 && ofm1 == ofmb && oj == ojb && oi == 0) {
+                              encoded_code_segments[encoded_stream_index].aux_index = ifm1;
+                              encoded_code_segments[encoded_stream_index].aux_index0 = 0;
+                              encoded_code_segments[encoded_stream_index].aux_index1 = 0;
+                              encoded_code_segments[encoded_stream_index].aux_index2 = handle->desc.H;
+                              encoded_code_segments[encoded_stream_index].aux_index3 = handle->desc.W;
+                              encoded_stream_index++; // Assume BLOCKSIFM 
+                           }
+		                }
 
                         if (mark_ofm_init == 1) {
                           if (ifm1 == 0 && oj == 0 && oi == 0) {
@@ -930,6 +951,20 @@ if(INTERLEAVE_IFM_BN) {
         for (img = my_img_start; img < my_img_end; img++) {
           if (mark_img_init== 1) {
             encoded_code_segments[encoded_stream_index].aux_index = img;
+			if(IMG_INIT_BATCH_NORM)
+			{
+              encoded_code_segments[encoded_stream_index].aux_index0 = 0;
+              encoded_code_segments[encoded_stream_index].aux_index1 = 0;
+              encoded_code_segments[encoded_stream_index].aux_index2 = handle->desc.H;
+              encoded_code_segments[encoded_stream_index].aux_index3 = handle->desc.W;
+			}
+			else
+			{
+              encoded_code_segments[encoded_stream_index].aux_index0 = 0;
+              encoded_code_segments[encoded_stream_index].aux_index1 = 0;
+              encoded_code_segments[encoded_stream_index].aux_index2 = 0;
+              encoded_code_segments[encoded_stream_index].aux_index3 = 0;
+			}
             encoded_stream_index++;
           }
           for (ofmb = my_ofm_start; ofmb < my_ofm_end; ofmb += handle->block_fwd_ofm) {
@@ -942,23 +977,27 @@ if(INTERLEAVE_IFM_BN) {
                         ij = oj * handle->desc.u;
                         ii = oi * handle->desc.v;
                         if (mark_ifm_init == 1) {
-			  if((INTERLEAVE_IFM_BN == 1 && ofmb == my_ofm_start && ofm1 == ofmb) || (ofmb == my_ofm_start && ojb == 0 && ofm1 == ofmb && oj == ojb && oi == 0)) {
+                          if(INTERLEAVED_BATCH_NORM == 1 && ofmb == my_ofm_start && ofm1 == ofmb) {
                             encoded_code_segments[encoded_stream_index].aux_index = ifm1;
-if(INTERLEAVE_IFM_BN) {
                             encoded_code_segments[encoded_stream_index].aux_index0 = ij;
                             encoded_code_segments[encoded_stream_index].aux_index1 = ii;
-                            encoded_code_segments[encoded_stream_index].aux_index2 = ij + handle->fwd_ofh_rb * handle->desc.u;
-                            encoded_code_segments[encoded_stream_index].aux_index3 = ii + handle->fwd_ofw_rb * handle->desc.v;
-} else {
+							if(oj + handle->fwd_ofh_rb <= handle->ofh) {
+                              encoded_code_segments[encoded_stream_index].aux_index2 = ij + handle->fwd_ofh_rb * handle->desc.u;
+                              encoded_code_segments[encoded_stream_index].aux_index3 = ii + handle->fwd_ofw_rb * handle->desc.v;
+							} else {
+                              encoded_code_segments[encoded_stream_index].aux_index2 = ij + handle->fwd_ofh_rb_2 * handle->desc.u;
+                              encoded_code_segments[encoded_stream_index].aux_index3 = ii + handle->fwd_ofw_rb_2 * handle->desc.v;
+							}
+                            encoded_stream_index++;
+                          } else if(IFM_INIT_BATCH_NORM ==1 && ofmb == my_ofm_start && ojb == 0 && ofm1 == ofmb && oj == ojb && oi == 0){
+                            encoded_code_segments[encoded_stream_index].aux_index = ifm1;
                             encoded_code_segments[encoded_stream_index].aux_index0 = 0;
                             encoded_code_segments[encoded_stream_index].aux_index1 = 0;
                             encoded_code_segments[encoded_stream_index].aux_index2 = handle->desc.H;
                             encoded_code_segments[encoded_stream_index].aux_index3 = handle->desc.W;
-}
                             encoded_stream_index++;
-			  }
-			}
-
+                          }
+			            }
 
                         if (mark_ofm_init == 1) {
                           if (ifm1 == 0 && oj == 0 && oi == 0) {
@@ -999,6 +1038,20 @@ if(INTERLEAVE_IFM_BN) {
       for (img = my_img_start; img < my_img_end; img++) {
         if (mark_img_init== 1) {
           encoded_code_segments[encoded_stream_index].aux_index = img;
+	      if(IMG_INIT_BATCH_NORM)
+			{
+              encoded_code_segments[encoded_stream_index].aux_index0 = 0;
+              encoded_code_segments[encoded_stream_index].aux_index1 = 0;
+              encoded_code_segments[encoded_stream_index].aux_index2 = handle->desc.H;
+              encoded_code_segments[encoded_stream_index].aux_index3 = handle->desc.W;
+			}
+			else
+			{
+              encoded_code_segments[encoded_stream_index].aux_index0 = 0;
+              encoded_code_segments[encoded_stream_index].aux_index1 = 0;
+              encoded_code_segments[encoded_stream_index].aux_index2 = 0;
+              encoded_code_segments[encoded_stream_index].aux_index3 = 0;
+			}
           encoded_stream_index++;
         }
         for (ofmb = my_ofm_start; ofmb < my_ofm_end; ofmb += handle->block_fwd_ofm) {
@@ -1011,23 +1064,29 @@ if(INTERLEAVE_IFM_BN) {
                       ij = oj * handle->desc.u;
                       ii = oi * handle->desc.v;
                       if (mark_ifm_init == 1) {
-		        if((INTERLEAVE_IFM_BN == 1 && ofmb == my_ofm_start &&  ofm1 == ofmb) || (ofmb == my_ofm_start && ojb == 0 && oj == ojb && oi == 0 && ofm1 == ofmb)) {
+		                if((INTERLEAVED_BATCH_NORM == 1 && ofmb == my_ofm_start &&  ofm1 == ofmb))
+						{
                           encoded_code_segments[encoded_stream_index].aux_index = ifm1;
-if(INTERLEAVE_IFM_BN) {
-                            encoded_code_segments[encoded_stream_index].aux_index0 = ij;
-                            encoded_code_segments[encoded_stream_index].aux_index1 = ii;
+                          encoded_code_segments[encoded_stream_index].aux_index0 = ij;
+                          encoded_code_segments[encoded_stream_index].aux_index1 = ii;
+					      if(oj + handle->fwd_ofh_rb <= handle->ofh) {
                             encoded_code_segments[encoded_stream_index].aux_index2 = ij + handle->fwd_ofh_rb * handle->desc.u;
                             encoded_code_segments[encoded_stream_index].aux_index3 = ii + handle->fwd_ofw_rb * handle->desc.v;
-} else {
-                            encoded_code_segments[encoded_stream_index].aux_index0 = 0;
-                            encoded_code_segments[encoded_stream_index].aux_index1 = 0;
-                            encoded_code_segments[encoded_stream_index].aux_index2 = handle->desc.H;
-                            encoded_code_segments[encoded_stream_index].aux_index3 = handle->desc.W;
-}
+					   	  } else {
+                            encoded_code_segments[encoded_stream_index].aux_index2 = ij + handle->fwd_ofh_rb_2 * handle->desc.u;
+                            encoded_code_segments[encoded_stream_index].aux_index3 = ii + handle->fwd_ofw_rb_2 * handle->desc.v;
+					      }	
                           encoded_stream_index++;
-			}
-		      }
-
+						}
+						else if(IFM_INIT_BATCH_NORM == 1 && ofmb == my_ofm_start && ojb == 0 && oj == ojb && oi == 0 && ofm1 == ofmb) {
+                          encoded_code_segments[encoded_stream_index].aux_index = ifm1;
+                          encoded_code_segments[encoded_stream_index].aux_index0 = 0;
+                          encoded_code_segments[encoded_stream_index].aux_index1 = 0;
+                          encoded_code_segments[encoded_stream_index].aux_index2 = handle->desc.H;
+                          encoded_code_segments[encoded_stream_index].aux_index3 = handle->desc.W;
+                          encoded_stream_index++;
+                        }
+			          }
 
                       if (mark_ofm_init == 1) {
                         if (ifm1 == 0 && oj == 0 && oi == 0) {

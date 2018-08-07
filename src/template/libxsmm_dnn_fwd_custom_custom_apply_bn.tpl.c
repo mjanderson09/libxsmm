@@ -92,12 +92,6 @@ for(ifm_idx = ifm1 ; ifm_idx < ifm1 + handle->blocksifm_blocking ; ifm_idx++ )
       _stddev = _mm512_load_ps(mystddev);
       _gamma = _mm512_load_ps(mygamma);
       _beta = _mm512_load_ps(mybeta);
-	  /*
-      _expect = _mm512_set1_ps(1.f);
-      _stddev = _mm512_set1_ps(1.f);
-      _gamma = _mm512_set1_ps(1.f);
-      _beta = _mm512_set1_ps(1.f);
-	  */
     }
     for(my_h = my_h_start ; my_h < my_h_end ; my_h++) 
     {
