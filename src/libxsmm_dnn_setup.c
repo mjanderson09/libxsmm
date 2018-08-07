@@ -632,17 +632,40 @@ LIBXSMM_API_INTERN libxsmm_dnn_err_t libxsmm_dnn_setup_fwd( libxsmm_dnn_layer* h
       handle->compute_max_in_kernel_fwd = 0;
     }
 
+    /* FIXME: Add proper code variants under these conditions  */
+    descriptor.jit_fuse_bn = 0;
+    descriptor.jit_fuse_batch_norm_fwd = 0;
+    descriptor.jit_fuse_elementwise_fwd = 0;
+    descriptor.jit_fuse_batch_norm_relu_fwd = 0;
+
     if ( (handle->buffer_format == LIBXSMM_DNN_TENSOR_FORMAT_LIBXSMM) && (handle->custom_format_type == LIBXSMM_DNN_TENSOR_FORMAT_LIBXSMM_2) ) {
       handle->code_fwd[0].xgemm.smm = libxsmm_smmdispatch(16, 16, 16, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
     } else {
-      if ( handle->n_variants == 1 ) {
-        descriptor.prefetch = LIBXSMM_CONVOLUTION_PREFETCH_ALL;
-        handle->code_fwd[0].pmm = libxsmm_create_xconv_forward(&descriptor);
+      descriptor.prefetch = LIBXSMM_CONVOLUTION_PREFETCH_ALL;
+      handle->code_fwd[0].pmm = libxsmm_create_xconv_forward(&descriptor);
+      if ( (((handle->fuse_ops & LIBXSMM_DNN_CONV_FUSE_BATCH_NORM_FWD) > 0) || ((handle->fuse_ops & LIBXSMM_DNN_CONV_FUSE_BATCH_NORM_RELU_FWD) > 0)) && (handle->desc.R == 1 && handle->desc.S == 1) ) {
+        descriptor.jit_fuse_bn = 1;
+        if (((handle->fuse_ops & LIBXSMM_DNN_CONV_FUSE_BATCH_NORM_FWD) > 0) || ((handle->fuse_ops & LIBXSMM_DNN_CONV_FUSE_BATCH_NORM_RELU_FWD) > 0)) {
+          descriptor.jit_fuse_batch_norm_fwd = 1;
+        }
+        if ((handle->fuse_ops & LIBXSMM_DNN_CONV_FUSE_ELEMENTWISE_FWD) > 0) {
+          descriptor.jit_fuse_elementwise_fwd = 1;
+        }
+        if ( ((handle->fuse_ops & LIBXSMM_DNN_CONV_FUSE_BATCH_NORM_RELU_FWD) > 0)) {
+          descriptor.jit_fuse_batch_norm_relu_fwd = 1;
+        }     
+        handle->code_fwd[1].pmm = libxsmm_create_xconv_forward(&descriptor); 
       }
+
       if (handle->padding_flag == 1) {
         handle->matcopy_fwd[0].xmatcopy = libxsmm_dispatch_mcopy(&matcopy_descriptor);
       }
     }
+    descriptor.jit_fuse_bn = 0;
+    descriptor.jit_fuse_batch_norm_fwd = 0;
+    descriptor.jit_fuse_elementwise_fwd = 0;
+    descriptor.jit_fuse_batch_norm_relu_fwd = 0;
+
     /* use jit code path */
     handle->use_fwd_generic = 0;
 
@@ -678,6 +701,31 @@ LIBXSMM_API_INTERN libxsmm_dnn_err_t libxsmm_dnn_setup_fwd( libxsmm_dnn_layer* h
       handle->fwd_ofh_rb = hrb1;
       descriptor.ofh_rb = hrb1;
       descriptor.ofw_rb = wrb1;
+      if ( (((handle->fuse_ops & LIBXSMM_DNN_CONV_FUSE_BATCH_NORM_FWD) > 0) || ((handle->fuse_ops & LIBXSMM_DNN_CONV_FUSE_BATCH_NORM_RELU_FWD) > 0)) && (handle->desc.R == 1 && handle->desc.S == 1) ) {
+        descriptor.jit_fuse_bn = 1;
+        if (((handle->fuse_ops & LIBXSMM_DNN_CONV_FUSE_BATCH_NORM_FWD) > 0) || ((handle->fuse_ops & LIBXSMM_DNN_CONV_FUSE_BATCH_NORM_RELU_FWD) > 0)) {
+          descriptor.jit_fuse_batch_norm_fwd = 1;
+        }
+        if ((handle->fuse_ops & LIBXSMM_DNN_CONV_FUSE_ELEMENTWISE_FWD) > 0) {
+          descriptor.jit_fuse_elementwise_fwd = 1;
+        }
+        if ( ((handle->fuse_ops & LIBXSMM_DNN_CONV_FUSE_BATCH_NORM_RELU_FWD) > 0)) {
+          descriptor.jit_fuse_batch_norm_relu_fwd = 1;
+        }     
+        descriptor.ofh_padded = handle->ofhp;
+        descriptor.ofw_padded = handle->ofwp;
+        descriptor.prefetch = LIBXSMM_CONVOLUTION_PREFETCH_ALL;
+        descriptor.ofh_rb = hrb1;
+        descriptor.ofw_rb = wrb1;
+        handle->code_fwd[2].pmm = libxsmm_create_xconv_forward(&descriptor);
+        descriptor.ofh_rb = hrb2;
+        descriptor.ofw_rb = wrb2;
+        descriptor.prefetch = LIBXSMM_CONVOLUTION_PREFETCH_ALL;
+        handle->code_fwd[3].pmm = libxsmm_create_xconv_forward(&descriptor);
+        handle->fwd_ofh_rb = hrb1;
+        descriptor.ofh_rb = hrb1;
+        descriptor.ofw_rb = wrb1;
+      }
     }
     for (i = 0; i < handle->desc.threads; i++) {
       handle->compute_fwd_indices_ptrs[i] = NULL;

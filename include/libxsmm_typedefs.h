@@ -358,6 +358,11 @@ LIBXSMM_EXTERN_C typedef struct LIBXSMM_MAY_ALIAS libxsmm_convolution_forward_de
   unsigned int perform_relu_in_kernel;
   unsigned int n_variants;
   unsigned int f32_bf16_cvt_rne;                /* non-zero if inc case of bf16 we perform RNE rounding when converting down from f32 in JIT sequence */
+  unsigned int jit_fuse_bn;
+  unsigned int jit_fuse_batch_norm_fwd;
+  unsigned int jit_fuse_elementwise_fwd;
+  unsigned int jit_fuse_batch_norm_relu_fwd;
+
   libxsmm_dnn_tensor_format format;
   libxsmm_dnn_conv_option option;
   libxsmm_dnn_datatype datatype;

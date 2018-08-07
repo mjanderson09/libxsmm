@@ -468,8 +468,8 @@ LIBXSMM_EXTERN_C struct LIBXSMM_RETARGETABLE libxsmm_dnn_layer {
   libxsmm_convolution_forward_descriptor       bwd_desc;
   libxsmm_convolution_weight_update_descriptor wu_desc;
   */
-  libxsmm_code_pointer code_fwd[3];
-  libxsmm_code_pointer code_bwd[3];
+  libxsmm_code_pointer code_fwd[4];
+  libxsmm_code_pointer code_bwd[4];
   libxsmm_code_pointer code_upd[2];
 
   libxsmm_code_pointer matcopy_fwd[4];
