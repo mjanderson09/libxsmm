@@ -158,10 +158,10 @@ if((handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_JIT) > 0)
   LIBXSMM_VLA_DECL(2, element_input_type, beta, (element_input_type*)handle->reg_beta->data, handle->ifmblock);
   LIBXSMM_VLA_DECL(6, element_input_type, input_st, (element_input_type*)handle->reg_input_st->data, BLOCKSIFM, handle->ifhp, handle->ifwp, handle->ifmblock, handle->fm_lp_block);
   LIBXSMM_VLA_DECL(6, element_input_type, input_left, (element_input_type*)handle->reg_input_left->data, BLOCKSIFM, handle->ifhp, handle->ifwp, handle->ifmblock, handle->fm_lp_block);
-  base_expect = (element_input_type*) &(LIBXSMM_VLA_ACCESS(  0, expect, 0, 0, handle->ifmblock));
-  base_stddev = (element_input_type*) &(LIBXSMM_VLA_ACCESS(  0, stddev, 0, 0, handle->ifmblock));
-  base_gamma = (element_input_type*) &(LIBXSMM_VLA_ACCESS(  0, gamma, 0, 0, handle->ifmblock));
-  base_beta = (element_input_type*) &(LIBXSMM_VLA_ACCESS(  0, beta, 0, 0, handle->ifmblock));
+  base_expect = (element_input_type*) &(LIBXSMM_VLA_ACCESS(  2, expect, 0, 0, handle->ifmblock));
+  base_stddev = (element_input_type*) &(LIBXSMM_VLA_ACCESS(  2, stddev, 0, 0, handle->ifmblock));
+  base_gamma = (element_input_type*) &(LIBXSMM_VLA_ACCESS(  2, gamma, 0, 0, handle->ifmblock));
+  base_beta = (element_input_type*) &(LIBXSMM_VLA_ACCESS(  2, beta, 0, 0, handle->ifmblock));
   base_input_left = (element_input_type*) &LIBXSMM_VLA_ACCESS(6, input_left, 0, 0, 0, 0, 0, 0,BLOCKSIFM, handle->ifhp, handle->ifwp, handle->ifmblock, handle->fm_lp_block);
   base_input_st = (element_input_type*) &LIBXSMM_VLA_ACCESS(6, input_st, 0, 0, 0, 0, 0, 0,BLOCKSIFM, handle->ifhp, handle->ifwp, handle->ifmblock, handle->fm_lp_block);
 }
