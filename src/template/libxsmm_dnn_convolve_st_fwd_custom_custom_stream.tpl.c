@@ -79,10 +79,12 @@ libxsmm_xmcopyfunction jitted_zero_overwrite = handle->matcopy_fwd[1].xmatcopy;
 libxsmm_convfunction kernel = (libxsmm_convfunction)handle->code_fwd[0].xconv.sconv;
 libxsmm_convfunction kernel2 = (libxsmm_convfunction)handle->code_fwd[1].xconv.sconv;
 libxsmm_convfunction kernel3 = (libxsmm_convfunction)handle->code_fwd[2].xconv.sconv;
-libxsmm_convfunction kernel_pool[3];
+libxsmm_convfunction kernel4 = (libxsmm_convfunction)handle->code_fwd[3].xconv.sconv;
+libxsmm_convfunction kernel_pool[4];
 kernel_pool[0] = kernel;
 kernel_pool[1] = kernel2;
 kernel_pool[2] = kernel3;
+kernel_pool[3] = kernel4;
 LIBXSMM_ALIGNED(float scale_factor, 64);
 LIBXSMM_ALIGNED(float *max_vals, 64) = NULL;
 char *variant = handle->kernel_fwd_variant_ptrs[ltid];
@@ -115,6 +117,7 @@ __m512 max_abs;
 kernel_pool[0] = kernel;
 kernel_pool[1] = kernel2;
 kernel_pool[2] = kernel3;
+kernel_pool[3] = kernel4;
 
 /* Initialize base pointers */
 if (handle->padding_flag == 1) {
@@ -139,6 +142,28 @@ n_segments = handle->n_fwd_code_segments[ltid];
 
 if (handle->use_lp_kernel == 1) {
   scale_factor = libxsmm_sexp2(-1.f*((float)(handle->reg_filter->scf + handle->reg_input->scf)));
+}
+
+element_input_type * base_expect;
+element_input_type * base_stddev;
+element_input_type * base_gamma;
+element_input_type * base_beta;
+element_input_type * base_input_st;
+element_input_type * base_input_left;
+if((handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_JIT) > 0)
+{
+  LIBXSMM_VLA_DECL(2, element_input_type, expect, (element_input_type*)handle->reg_expect->data, handle->ifmblock);
+  LIBXSMM_VLA_DECL(2, element_input_type, stddev, (element_input_type*)handle->reg_stddev->data, handle->ifmblock);
+  LIBXSMM_VLA_DECL(2, element_input_type, gamma, (element_input_type*)handle->reg_gamma->data, handle->ifmblock);
+  LIBXSMM_VLA_DECL(2, element_input_type, beta, (element_input_type*)handle->reg_beta->data, handle->ifmblock);
+  LIBXSMM_VLA_DECL(6, element_input_type, input_st, (element_input_type*)handle->reg_input_st->data, BLOCKSIFM, handle->ifhp, handle->ifwp, handle->ifmblock, handle->fm_lp_block);
+  LIBXSMM_VLA_DECL(6, element_input_type, input_left, (element_input_type*)handle->reg_input_left->data, BLOCKSIFM, handle->ifhp, handle->ifwp, handle->ifmblock, handle->fm_lp_block);
+  base_expect = (element_input_type*) &(LIBXSMM_VLA_ACCESS(  0, expect, 0, 0, handle->ifmblock));
+  base_stddev = (element_input_type*) &(LIBXSMM_VLA_ACCESS(  0, stddev, 0, 0, handle->ifmblock));
+  base_gamma = (element_input_type*) &(LIBXSMM_VLA_ACCESS(  0, gamma, 0, 0, handle->ifmblock));
+  base_beta = (element_input_type*) &(LIBXSMM_VLA_ACCESS(  0, beta, 0, 0, handle->ifmblock));
+  base_input_left = (element_input_type*) &LIBXSMM_VLA_ACCESS(6, input_left, 0, 0, 0, 0, 0, 0,BLOCKSIFM, handle->ifhp, handle->ifwp, handle->ifmblock, handle->fm_lp_block);
+  base_input_st = (element_input_type*) &LIBXSMM_VLA_ACCESS(6, input_st, 0, 0, 0, 0, 0, 0,BLOCKSIFM, handle->ifhp, handle->ifwp, handle->ifmblock, handle->fm_lp_block);
 }
 
 if ((handle->fuse_ops & LIBXSMM_DNN_CONV_FUSE_MAX_STATS) > 0) {
@@ -291,7 +316,7 @@ if (n_segments) {
               input_base + pi, weight_base + pw, output_base + po,
               bn_sum_base + offset_bn, bn_sum_base2 + offset_bn,
               &scale_factor, max_vals, accumulators_scratch + offset_o,
-			  NULL, NULL, NULL, NULL, NULL, NULL);
+			  base_expect, base_stddev, base_gamma, base_beta, base_input_st+offset_i, base_input_left+offset_i);
             ++pool_index;
             i += 3;
             ++bn_i;
@@ -404,7 +429,7 @@ if (n_segments) {
               input_base + pi, weight_base + pw, output_base + po,
               bn_sum_base + offset_bn, bn_sum_base2 + offset_bn,
               &scale_factor, max_vals, accumulators_scratch + offset_o,
-			  NULL, NULL, NULL, NULL, NULL, NULL);
+			  base_expect, base_stddev, base_gamma, base_beta, base_input_st+offset_i, base_input_left+offset_i);
             i += 3;
             ++bn_i;
           }
@@ -648,7 +673,7 @@ if (n_segments) {
             pw = stream[i+LOCAL_ENTRIES_PER_CONV+1];
             po = stream[i+LOCAL_ENTRIES_PER_CONV+2];
             kernel_pool[vi]( input_base + offset_i, weight_base + offset_w, output_base + offset_o, input_base + pi, weight_base + pw, output_base + po, &scale_factor, max_vals,
-			NULL, NULL, NULL, NULL, NULL, NULL);
+			base_expect, base_stddev, base_gamma, base_beta, base_input_st+offset_i, base_input_left+offset_i);
             pool_index++;
             i+=LOCAL_ENTRIES_PER_CONV;
           }
@@ -893,7 +918,7 @@ if (n_segments) {
               input_base + offset_i, weight_base + offset_w, output_base + offset_o,
               input_base + pi, weight_base + pw, output_base + po,
               &scale_factor, max_vals, accumulators_scratch + offset_o,
-              NULL, NULL, NULL, NULL, NULL, NULL); 
+              base_expect, base_stddev, base_gamma, base_beta, base_input_st+offset_i, base_input_left+offset_i); 
             i += 3;
           }
 	  }
@@ -910,7 +935,7 @@ if (n_segments) {
             pw = stream[i+LOCAL_ENTRIES_PER_CONV+1];
             po = stream[i+LOCAL_ENTRIES_PER_CONV+2];
 	    {
-              kernel( input_base + offset_i, weight_base + offset_w, output_base + offset_o, input_base + pi, weight_base + pw, output_base + po, &scale_factor, max_vals, NULL, NULL, NULL, NULL, NULL, NULL);
+              kernel( input_base + offset_i, weight_base + offset_w, output_base + offset_o, input_base + pi, weight_base + pw, output_base + po, &scale_factor, max_vals, base_expect, base_stddev, base_gamma, base_beta, base_input_st+offset_i, base_input_left+offset_i);
 	    }
 	    pool_index++;
             i+=LOCAL_ENTRIES_PER_CONV;
@@ -995,7 +1020,7 @@ if (n_segments) {
         kernel(
           input_base + offset_i, weight_base + offset_w, output_base + offset_o,
           input_base + pi, weight_base + pw, output_base + po,
-          &scale_factor, max_vals, NULL, NULL, NULL, NULL, NULL, NULL);
+          &scale_factor, max_vals, base_expect, base_stddev, base_gamma, base_beta, base_input_st+offset_i, base_input_left+offset_i);
         i += 3;
       }
     }
@@ -1024,7 +1049,7 @@ if (n_segments) {
           input_base + offset_i, weight_base + offset_w, output_base + offset_o,
           input_base + pi, weight_base + pw, output_base + po,
           bn_sum_base + offset_bn, bn_sum_base2 + offset_bn, &scale_factor, max_vals, 
-		  NULL, NULL, NULL, NULL, NULL, NULL);
+		  base_expect, base_stddev, base_gamma, base_beta, base_input_st+offset_i, base_input_left+offset_i);
         i += 3;
         ++bn_i;
       }
@@ -1041,7 +1066,7 @@ if (n_segments) {
           input_base + offset_i, weight_base + offset_w, output_base + offset_o,
           input_base + pi, weight_base + pw, output_base + po,
           bn_sum_base + offset_bn, bn_sum_base2 + offset_bn, &scale_factor, max_vals,
-		  NULL, NULL, NULL, NULL, NULL, NULL);
+		  base_expect, base_stddev, base_gamma, base_beta, base_input_st+offset_i, base_input_left+offset_i);
         i += 3;
         ++bn_i;
       }
@@ -1059,7 +1084,7 @@ if (n_segments) {
         kernel_pool[vi](
           input_base + offset_i, weight_base + offset_w, output_base + offset_o,
           input_base + pi, weight_base + pw, output_base + po, &scale_factor, max_vals,
-		  NULL, NULL, NULL, NULL, NULL, NULL);
+		  base_expect, base_stddev, base_gamma, base_beta, base_input_st+offset_i, base_input_left+offset_i);
         i += 3;
       }
     } else {
@@ -1073,7 +1098,7 @@ if (n_segments) {
         kernel(
           input_base + offset_i, weight_base + offset_w, output_base + offset_o,
           input_base + pi, weight_base + pw, output_base + po, &scale_factor, max_vals,
-		  NULL, NULL, NULL, NULL, NULL, NULL);
+		  base_expect, base_stddev, base_gamma, base_beta, base_input_st+offset_i, base_input_left+offset_i);
         i += 3;
       }
     }

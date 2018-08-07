@@ -45,9 +45,9 @@
 /*#define USE_FUSED_RELU_BWD*/
 
 //#include "bench_defines.h"
-//#define USE_FUSED_BATCH_NORM_FWD
-//#define USE_ELEMENTWISE_FWD
-//#define USE_FUSED_BATCH_NORM_RELU_FWD
+#define USE_FUSED_BATCH_NORM_FWD
+#define USE_ELEMENTWISE_FWD
+#define USE_FUSED_BATCH_NORM_RELU_FWD
 //#define USE_FUSE_LEVEL_NAIVE
 //#define USE_FUSE_LEVEL_IFM
 //#define USE_FUSE_LEVEL_KERNEL
