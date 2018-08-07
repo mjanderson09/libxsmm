@@ -435,15 +435,15 @@ for (ltid = 0; ltid < handle->desc.threads; ltid++)
                       if (handle->n_variants == 2) {
                         if (handle->h_variants) {
                           if (oj + handle->fwd_ofh_rb <= handle->ofh) {
-                            kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] =  0;
+                            kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] =  (JIT_BATCH_NORM == 1 && ofmb == my_ofm_start && ofm1 == ofmb) ? 2 : 0;
                           } else {
-                            kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] =  1;
+                            kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] =  (JIT_BATCH_NORM == 1 && ofmb == my_ofm_start && ofm1 == ofmb) ? 3 : 1;
                           }
                         } else {
                           if (oi + handle->fwd_ofw_rb <= handle->ofw) {
-                            kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] =  0;
+                            kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] =  (JIT_BATCH_NORM == 1 && ofmb == my_ofm_start && ofm1 == ofmb) ? 2 : 0;
                           } else {
-                            kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] = 1;
+                            kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] = (JIT_BATCH_NORM == 1 && ofmb == my_ofm_start && ofm1 == ofmb) ? 3 : 1;
                           }
                         }
                       } else {
@@ -584,15 +584,15 @@ for (ltid = 0; ltid < handle->desc.threads; ltid++)
                       if (handle->n_variants == 2) {
                         if (handle->h_variants) {
                           if (oj + handle->fwd_ofh_rb <= handle->ofh) {
-                            kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] =  0;
+                            kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] =  (JIT_BATCH_NORM == 1 && ofmb == my_ofm_start && ofm1 == ofmb) ? 2 : 0;
                           } else {
-                            kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] =  1;
+                            kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] =  (JIT_BATCH_NORM == 1 && ofmb == my_ofm_start && ofm1 == ofmb) ? 3 : 1;
                           }
                         } else {
                           if (oi + handle->fwd_ofw_rb <= handle->ofw) {
-                            kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] = 0;
+                            kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] = (JIT_BATCH_NORM == 1 && ofmb == my_ofm_start && ofm1 == ofmb) ? 2 : 0;
                           } else {
-                            kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] = 1;
+                            kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] = (JIT_BATCH_NORM == 1 && ofmb == my_ofm_start && ofm1 == ofmb) ? 3 : 1;
                           }
                         }
                       } else {
@@ -743,15 +743,15 @@ for (ltid = 0; ltid < handle->desc.threads; ltid++)
                     if (handle->n_variants == 2) {
                       if (handle->h_variants) {
                         if (oj + handle->fwd_ofh_rb <= handle->ofh) {
-                          kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] = 0;
+                          kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] = (JIT_BATCH_NORM == 1 && ofmb == my_ofm_start && ofm1 == ofmb) ? 2 : 0;
                         } else {
-                          kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] = 1;
+                          kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] = (JIT_BATCH_NORM == 1 && ofmb == my_ofm_start && ofm1 == ofmb) ? 3 : 1;
                         }
                       } else {
                         if (oi + handle->fwd_ofw_rb <= handle->ofw) {
-                          kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] = 0;
+                          kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] = (JIT_BATCH_NORM == 1 && ofmb == my_ofm_start && ofm1 == ofmb) ? 2 : 0;
                         } else {
-                          kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] = 1;
+                          kernel_variant[local_entries/LOCAL_ENTRIES_PER_CONV] = (JIT_BATCH_NORM == 1 && ofmb == my_ofm_start && ofm1 == ofmb) ? 3 : 1;
                         }
                       }
                     } else {
