@@ -416,23 +416,45 @@ if (n_segments) {
           }
 
           /* Run the stream of convolutions for this segment */
-          for (conv_i = 0; conv_i < n_convs; conv_i++) {
-            offset_i = stream[i];
-            offset_w = stream[i+1];
-            offset_o = stream[i+2];
-            pi = stream[i+LOCAL_ENTRIES_PER_CONV+0];
-            pw = stream[i+LOCAL_ENTRIES_PER_CONV+1];
-            po = stream[i+LOCAL_ENTRIES_PER_CONV+2];
-            offset_bn = bn_stream[bn_i];
-            kernel(
-              input_base + offset_i, weight_base + offset_w, output_base + offset_o,
-              input_base + pi, weight_base + pw, output_base + po,
-              bn_sum_base + offset_bn, bn_sum_base2 + offset_bn,
-              &scale_factor, max_vals, accumulators_scratch + offset_o,
-			  base_expect, base_stddev, base_gamma, base_beta, base_input_st+offset_i, base_input_left+offset_i);
-            i += 3;
-            ++bn_i;
+          if((handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_JIT) > 0) {
+            for (conv_i = 0; conv_i < n_convs; conv_i++) {
+              offset_i = stream[i];
+              offset_w = stream[i+1];
+              offset_o = stream[i+2];
+              pi = stream[i+LOCAL_ENTRIES_PER_CONV+0];
+              pw = stream[i+LOCAL_ENTRIES_PER_CONV+1];
+              po = stream[i+LOCAL_ENTRIES_PER_CONV+2];
+              offset_bn = bn_stream[bn_i];
+              kernel_pool[variant[bn_i]](
+                  input_base + offset_i, weight_base + offset_w, output_base + offset_o,
+                  input_base + pi, weight_base + pw, output_base + po,
+                  bn_sum_base + offset_bn, bn_sum_base2 + offset_bn,
+                  &scale_factor, max_vals, accumulators_scratch + offset_o,
+                  base_expect, base_stddev, base_gamma, base_beta, base_input_st+offset_i, base_input_left+offset_i);
+              i += 3;
+              ++bn_i;
+            }
+          } else {
+            for (conv_i = 0; conv_i < n_convs; conv_i++) {
+              offset_i = stream[i];
+              offset_w = stream[i+1];
+              offset_o = stream[i+2];
+              pi = stream[i+LOCAL_ENTRIES_PER_CONV+0];
+              pw = stream[i+LOCAL_ENTRIES_PER_CONV+1];
+              po = stream[i+LOCAL_ENTRIES_PER_CONV+2];
+              offset_bn = bn_stream[bn_i];
+              kernel(
+                  input_base + offset_i, weight_base + offset_w, output_base + offset_o,
+                  input_base + pi, weight_base + pw, output_base + po,
+                  bn_sum_base + offset_bn, bn_sum_base2 + offset_bn,
+                  &scale_factor, max_vals, accumulators_scratch + offset_o,
+                  base_expect, base_stddev, base_gamma, base_beta, base_input_st+offset_i, base_input_left+offset_i);
+              i += 3;
+              ++bn_i;
+            }
+      
           }
+
         }
       }
     } else { /* We don't do BN stuff in the kernel  */
@@ -444,26 +466,26 @@ if (n_segments) {
           if (instr == IMG_LOOP_INIT) {
             img = code_stream[pc].aux_index;
             /* Apply padding  */
-			if((handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_NAIVE) ==  0)
-			{
+            if((handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_NAIVE) ==  0)
+            {
               if (handle->padding_flag == 1) {
 #include "libxsmm_dnn_fwd_custom_custom_padding.tpl.c"
               }
             }
-			else {
-			  /* Apply batch norm */
-			     my_h_start = code_stream[pc].aux_index0;
-			     my_w_start = code_stream[pc].aux_index1;
-			     my_h_end = code_stream[pc].aux_index2;
-			     my_w_end = code_stream[pc].aux_index3;
+            else {
+              /* Apply batch norm */
+              my_h_start = code_stream[pc].aux_index0;
+              my_w_start = code_stream[pc].aux_index1;
+              my_h_end = code_stream[pc].aux_index2;
+              my_w_end = code_stream[pc].aux_index3;
 #include "libxsmm_dnn_fwd_custom_custom_apply_bn_naive.tpl.c"
-			}
+            }
           }
 
           if (instr == IMG_LOOP_CLOSE) {
             img = code_stream[pc].aux_index;
             /* Apply padding  */
-	    if ((handle->padding_flag == 1) && (((handle->fuse_ops & LIBXSMM_DNN_CONV_FUSE_BATCH_NORM_FWD) > 0) ) || ((handle->fuse_ops & LIBXSMM_DNN_CONV_FUSE_BATCH_NORM_RELU_FWD))) {
+            if ((handle->padding_flag == 1) && (((handle->fuse_ops & LIBXSMM_DNN_CONV_FUSE_BATCH_NORM_FWD) > 0) ) || ((handle->fuse_ops & LIBXSMM_DNN_CONV_FUSE_BATCH_NORM_RELU_FWD))) {
 #include "libxsmm_dnn_fwd_custom_custom_padding_back.tpl.c"
             }
           }
@@ -479,13 +501,13 @@ if (n_segments) {
           }
 
           if ( instr == IFM_LOOP_FIRST_TOUCH ) {
-             ifm1 = code_stream[pc].aux_index;
-			 my_h_start = code_stream[pc].aux_index0;
-			 my_w_start = code_stream[pc].aux_index1;
-			 my_h_end = code_stream[pc].aux_index2;
-			 my_w_end = code_stream[pc].aux_index3;
+            ifm1 = code_stream[pc].aux_index;
+            my_h_start = code_stream[pc].aux_index0;
+            my_w_start = code_stream[pc].aux_index1;
+            my_h_end = code_stream[pc].aux_index2;
+            my_w_end = code_stream[pc].aux_index3;
 #include "libxsmm_dnn_fwd_custom_custom_apply_bn.tpl.c"
-	  }
+          }
 
 
           if (instr == OFM_LOOP_CLOSE) {
@@ -526,9 +548,9 @@ if (n_segments) {
                   }
 
                   _mm512_store_ps( &LIBXSMM_VLA_ACCESS(4, stats, 0, code_stream[pc].aux_index/*ofm1*/, img, 0,
-                         BLOCKSOFM, handle->desc.N,  handle->ofmblock), bsum );
+                        BLOCKSOFM, handle->desc.N,  handle->ofmblock), bsum );
                   _mm512_store_ps( &LIBXSMM_VLA_ACCESS(4, stats, 1, code_stream[pc].aux_index/*ofm1*/, img, 0,
-                         BLOCKSOFM, handle->desc.N, handle->ofmblock), bsum2 );
+                        BLOCKSOFM, handle->desc.N, handle->ofmblock), bsum2 );
                 } else {
                   for ( oj = 0; oj < handle->ofh; oj++ ) {
                     for ( oi = 0; oi < handle->ofw*handle->ofmblock; oi+=16 ) {
@@ -568,9 +590,9 @@ if (n_segments) {
                   }
 
                   _mm512_store_ps( &LIBXSMM_VLA_ACCESS(4, stats, 0, code_stream[pc].aux_index/*ofm1*/, img, 0,
-                         BLOCKSOFM, handle->desc.N,  handle->ofmblock), bsum );
+                        BLOCKSOFM, handle->desc.N,  handle->ofmblock), bsum );
                   _mm512_store_ps( &LIBXSMM_VLA_ACCESS(4, stats, 1, code_stream[pc].aux_index/*ofm1*/, img, 0,
-                         BLOCKSOFM, handle->desc.N, handle->ofmblock), bsum2 );
+                        BLOCKSOFM, handle->desc.N, handle->ofmblock), bsum2 );
                 } else {
                   for ( oj = 0; oj < handle->ofh; oj++ ) {
                     for ( oi = 0; oi < handle->ofw*handle->ofmblock; oi+=16 ) {
@@ -673,7 +695,7 @@ if (n_segments) {
             pw = stream[i+LOCAL_ENTRIES_PER_CONV+1];
             po = stream[i+LOCAL_ENTRIES_PER_CONV+2];
             kernel_pool[vi]( input_base + offset_i, weight_base + offset_w, output_base + offset_o, input_base + pi, weight_base + pw, output_base + po, &scale_factor, max_vals,
-			base_expect, base_stddev, base_gamma, base_beta, base_input_st+offset_i, base_input_left+offset_i);
+                base_expect, base_stddev, base_gamma, base_beta, base_input_st+offset_i, base_input_left+offset_i);
             pool_index++;
             i+=LOCAL_ENTRIES_PER_CONV;
           }
@@ -685,26 +707,26 @@ if (n_segments) {
           if (instr == IMG_LOOP_INIT) {
             img = code_stream[pc].aux_index;
             /* Apply padding  */
-			if((handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_NAIVE) ==  0)
-			{
+            if((handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_NAIVE) ==  0)
+            {
               if (handle->padding_flag == 1) {
 #include "libxsmm_dnn_fwd_custom_custom_padding.tpl.c"
               }
             }
-			else {
-			  /* Apply batch norm */
-			     my_h_start = code_stream[pc].aux_index0;
-			     my_w_start = code_stream[pc].aux_index1;
-			     my_h_end = code_stream[pc].aux_index2;
-			     my_w_end = code_stream[pc].aux_index3;
+            else {
+              /* Apply batch norm */
+              my_h_start = code_stream[pc].aux_index0;
+              my_w_start = code_stream[pc].aux_index1;
+              my_h_end = code_stream[pc].aux_index2;
+              my_w_end = code_stream[pc].aux_index3;
 #include "libxsmm_dnn_fwd_custom_custom_apply_bn_naive.tpl.c"
-			}
+            }
           }
 
           if (instr == IMG_LOOP_CLOSE) {
             img = code_stream[pc].aux_index;
             /* Apply padding  */
-	    if ((handle->padding_flag == 1) && (((handle->fuse_ops & LIBXSMM_DNN_CONV_FUSE_BATCH_NORM_FWD) > 0) ) || ((handle->fuse_ops & LIBXSMM_DNN_CONV_FUSE_BATCH_NORM_RELU_FWD))) {
+            if ((handle->padding_flag == 1) && (((handle->fuse_ops & LIBXSMM_DNN_CONV_FUSE_BATCH_NORM_FWD) > 0) ) || ((handle->fuse_ops & LIBXSMM_DNN_CONV_FUSE_BATCH_NORM_RELU_FWD))) {
 #include "libxsmm_dnn_fwd_custom_custom_padding_back.tpl.c"
             }
           }
@@ -720,13 +742,13 @@ if (n_segments) {
           }
 
           if ( instr == IFM_LOOP_FIRST_TOUCH ) {
-             ifm1 = code_stream[pc].aux_index;
-			 my_h_start = code_stream[pc].aux_index0;
-			 my_w_start = code_stream[pc].aux_index1;
-			 my_h_end = code_stream[pc].aux_index2;
-			 my_w_end = code_stream[pc].aux_index3;
+            ifm1 = code_stream[pc].aux_index;
+            my_h_start = code_stream[pc].aux_index0;
+            my_w_start = code_stream[pc].aux_index1;
+            my_h_end = code_stream[pc].aux_index2;
+            my_w_end = code_stream[pc].aux_index3;
 #include "libxsmm_dnn_fwd_custom_custom_apply_bn.tpl.c"
-	  }
+          }
           if ( instr == OFM_LOOP_CLOSE ) {
             /* Copy accumulators scratch to destination output and zero scratch */
             if (handle->use_accumulation_scratch) {
@@ -766,9 +788,9 @@ if (n_segments) {
                   }
 
                   _mm512_store_ps( &LIBXSMM_VLA_ACCESS(4, stats, 0, code_stream[pc].aux_index/*ofm1*/, img, 0,
-                         BLOCKSOFM, handle->desc.N,  handle->ofmblock), bsum );
+                        BLOCKSOFM, handle->desc.N,  handle->ofmblock), bsum );
                   _mm512_store_ps( &LIBXSMM_VLA_ACCESS(4, stats, 1, code_stream[pc].aux_index/*ofm1*/, img, 0,
-                         BLOCKSOFM, handle->desc.N, handle->ofmblock), bsum2 );
+                        BLOCKSOFM, handle->desc.N, handle->ofmblock), bsum2 );
                 } else {
                   for ( oj = 0; oj < handle->ofh; oj++ ) {
                     for ( oi = 0; oi < handle->ofw*handle->ofmblock; oi+=16 ) {
@@ -809,9 +831,9 @@ if (n_segments) {
                   }
 
                   _mm512_store_ps( &LIBXSMM_VLA_ACCESS(4, stats, 0, code_stream[pc].aux_index/*ofm1*/, img, 0,
-                         BLOCKSOFM, handle->desc.N,  handle->ofmblock), bsum );
+                        BLOCKSOFM, handle->desc.N,  handle->ofmblock), bsum );
                   _mm512_store_ps( &LIBXSMM_VLA_ACCESS(4, stats, 1, code_stream[pc].aux_index/*ofm1*/, img, 0,
-                         BLOCKSOFM, handle->desc.N, handle->ofmblock), bsum2 );
+                        BLOCKSOFM, handle->desc.N, handle->ofmblock), bsum2 );
                 } else {
                   for ( oj = 0; oj < handle->ofh; oj++ ) {
                     for ( oi = 0; oi < handle->ofw*handle->ofmblock; oi+=16 ) {
@@ -905,42 +927,42 @@ if (n_segments) {
           }
 
           /* Run the stream of convolutions for this segment */
-	  if(variant[pool_index] < 2)
-	  {
-          for (conv_i = 0; conv_i < n_convs; conv_i++) {
-            offset_i = stream[i];
-            offset_w = stream[i+1];
-            offset_o = stream[i+2];
-            pi = stream[i+3];
-            pw = stream[i+4];
-            po = stream[i+5];
-            kernel(
-              input_base + offset_i, weight_base + offset_w, output_base + offset_o,
-              input_base + pi, weight_base + pw, output_base + po,
-              &scale_factor, max_vals, accumulators_scratch + offset_o,
-              base_expect, base_stddev, base_gamma, base_beta, base_input_st+offset_i, base_input_left+offset_i); 
-            i += 3;
+          if(variant[pool_index] < 2)
+          {
+            for (conv_i = 0; conv_i < n_convs; conv_i++) {
+              offset_i = stream[i];
+              offset_w = stream[i+1];
+              offset_o = stream[i+2];
+              pi = stream[i+3];
+              pw = stream[i+4];
+              po = stream[i+5];
+              kernel(
+                  input_base + offset_i, weight_base + offset_w, output_base + offset_o,
+                  input_base + pi, weight_base + pw, output_base + po,
+                  &scale_factor, max_vals, accumulators_scratch + offset_o,
+                  base_expect, base_stddev, base_gamma, base_beta, base_input_st+offset_i, base_input_left+offset_i); 
+              i += 3;
+            }
           }
-	  }
-	  else {
-          for (conv_i = 0; conv_i < n_convs; conv_i++) {
-            offset_i = stream[i];
-            offset_w = stream[i+1];
-            offset_o = stream[i+2];
-            offset_i_st = stream[i+3];
-            oi = stream[i+4];
-            oj = stream[i+5];
-            ifm1 = stream[i+6];
-            pi = stream[i+LOCAL_ENTRIES_PER_CONV+0];
-            pw = stream[i+LOCAL_ENTRIES_PER_CONV+1];
-            po = stream[i+LOCAL_ENTRIES_PER_CONV+2];
-	    {
-              kernel( input_base + offset_i, weight_base + offset_w, output_base + offset_o, input_base + pi, weight_base + pw, output_base + po, &scale_factor, max_vals, base_expect, base_stddev, base_gamma, base_beta, base_input_st+offset_i, base_input_left+offset_i);
-	    }
-	    pool_index++;
-            i+=LOCAL_ENTRIES_PER_CONV;
+          else {
+            for (conv_i = 0; conv_i < n_convs; conv_i++) {
+              offset_i = stream[i];
+              offset_w = stream[i+1];
+              offset_o = stream[i+2];
+              offset_i_st = stream[i+3];
+              oi = stream[i+4];
+              oj = stream[i+5];
+              ifm1 = stream[i+6];
+              pi = stream[i+LOCAL_ENTRIES_PER_CONV+0];
+              pw = stream[i+LOCAL_ENTRIES_PER_CONV+1];
+              po = stream[i+LOCAL_ENTRIES_PER_CONV+2];
+              {
+                kernel( input_base + offset_i, weight_base + offset_w, output_base + offset_o, input_base + pi, weight_base + pw, output_base + po, &scale_factor, max_vals, base_expect, base_stddev, base_gamma, base_beta, base_input_st+offset_i, base_input_left+offset_i);
+              }
+              pool_index++;
+              i+=LOCAL_ENTRIES_PER_CONV;
+            }
           }
-        }
         }
       }
     }
@@ -956,19 +978,19 @@ if (n_segments) {
       n_convs = code_stream[pc].n_convs;
       if (instr == IMG_LOOP_INIT) {
         /* Padding code via jitted matcopy kernel */
-		if((handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_NAIVE) ==  0)
-		{
+        if((handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_NAIVE) ==  0)
+        {
 #include "libxsmm_dnn_fwd_custom_custom_padding_img_par.tpl.c"
         }
-		else {
+        else {
 
-    	  /* Apply batch norm */
- 		     my_h_start = code_stream[pc].aux_index0;
-		     my_w_start = code_stream[pc].aux_index1;
-		     my_h_end = code_stream[pc].aux_index2;
-		     my_w_end = code_stream[pc].aux_index3;
+          /* Apply batch norm */
+          my_h_start = code_stream[pc].aux_index0;
+          my_w_start = code_stream[pc].aux_index1;
+          my_h_end = code_stream[pc].aux_index2;
+          my_w_end = code_stream[pc].aux_index3;
 #include "libxsmm_dnn_fwd_custom_custom_apply_bn_naive.tpl.c"
-		}
+        }
       }
 
       if (instr == IMG_LOOP_CLOSE) {
@@ -1001,11 +1023,11 @@ if (n_segments) {
         }
       }
       if ( instr == IFM_LOOP_FIRST_TOUCH ) {
-           ifm1 = code_stream[pc].aux_index;
-			 my_h_start = code_stream[pc].aux_index0;
-			 my_w_start = code_stream[pc].aux_index1;
-			 my_h_end = code_stream[pc].aux_index2;
-			 my_w_end = code_stream[pc].aux_index3;
+        ifm1 = code_stream[pc].aux_index;
+        my_h_start = code_stream[pc].aux_index0;
+        my_w_start = code_stream[pc].aux_index1;
+        my_h_end = code_stream[pc].aux_index2;
+        my_w_end = code_stream[pc].aux_index3;
 #include "libxsmm_dnn_fwd_custom_custom_apply_bn.tpl.c"
       }
 
@@ -1018,9 +1040,9 @@ if (n_segments) {
         pw = stream[i+4];
         po = stream[i+5];
         kernel(
-          input_base + offset_i, weight_base + offset_w, output_base + offset_o,
-          input_base + pi, weight_base + pw, output_base + po,
-          &scale_factor, max_vals, base_expect, base_stddev, base_gamma, base_beta, base_input_st+offset_i, base_input_left+offset_i);
+            input_base + offset_i, weight_base + offset_w, output_base + offset_o,
+            input_base + pi, weight_base + pw, output_base + po,
+            &scale_factor, max_vals, base_expect, base_stddev, base_gamma, base_beta, base_input_st+offset_i, base_input_left+offset_i);
         i += 3;
       }
     }
@@ -1046,10 +1068,10 @@ if (n_segments) {
         po = stream[i+LOCAL_ENTRIES_PER_CONV+2];
         offset_bn = bn_stream[bn_i];
         kernel_pool[vi](
-          input_base + offset_i, weight_base + offset_w, output_base + offset_o,
-          input_base + pi, weight_base + pw, output_base + po,
-          bn_sum_base + offset_bn, bn_sum_base2 + offset_bn, &scale_factor, max_vals, 
-		  base_expect, base_stddev, base_gamma, base_beta, base_input_st+offset_i, base_input_left+offset_i);
+            input_base + offset_i, weight_base + offset_w, output_base + offset_o,
+            input_base + pi, weight_base + pw, output_base + po,
+            bn_sum_base + offset_bn, bn_sum_base2 + offset_bn, &scale_factor, max_vals, 
+            base_expect, base_stddev, base_gamma, base_beta, base_input_st+offset_i, base_input_left+offset_i);
         i += 3;
         ++bn_i;
       }
@@ -1063,10 +1085,10 @@ if (n_segments) {
         po = stream[i+LOCAL_ENTRIES_PER_CONV+2];
         offset_bn = bn_stream[bn_i];
         kernel(
-          input_base + offset_i, weight_base + offset_w, output_base + offset_o,
-          input_base + pi, weight_base + pw, output_base + po,
-          bn_sum_base + offset_bn, bn_sum_base2 + offset_bn, &scale_factor, max_vals,
-		  base_expect, base_stddev, base_gamma, base_beta, base_input_st+offset_i, base_input_left+offset_i);
+            input_base + offset_i, weight_base + offset_w, output_base + offset_o,
+            input_base + pi, weight_base + pw, output_base + po,
+            bn_sum_base + offset_bn, bn_sum_base2 + offset_bn, &scale_factor, max_vals,
+            base_expect, base_stddev, base_gamma, base_beta, base_input_st+offset_i, base_input_left+offset_i);
         i += 3;
         ++bn_i;
       }
@@ -1082,9 +1104,9 @@ if (n_segments) {
         pw = stream[i+4];
         po = stream[i+5];
         kernel_pool[vi](
-          input_base + offset_i, weight_base + offset_w, output_base + offset_o,
-          input_base + pi, weight_base + pw, output_base + po, &scale_factor, max_vals,
-		  base_expect, base_stddev, base_gamma, base_beta, base_input_st+offset_i, base_input_left+offset_i);
+            input_base + offset_i, weight_base + offset_w, output_base + offset_o,
+            input_base + pi, weight_base + pw, output_base + po, &scale_factor, max_vals,
+            base_expect, base_stddev, base_gamma, base_beta, base_input_st+offset_i, base_input_left+offset_i);
         i += 3;
       }
     } else {
@@ -1096,9 +1118,9 @@ if (n_segments) {
         pw = stream[i+4];
         po = stream[i+5];
         kernel(
-          input_base + offset_i, weight_base + offset_w, output_base + offset_o,
-          input_base + pi, weight_base + pw, output_base + po, &scale_factor, max_vals,
-		  base_expect, base_stddev, base_gamma, base_beta, base_input_st+offset_i, base_input_left+offset_i);
+            input_base + offset_i, weight_base + offset_w, output_base + offset_o,
+            input_base + pi, weight_base + pw, output_base + po, &scale_factor, max_vals,
+            base_expect, base_stddev, base_gamma, base_beta, base_input_st+offset_i, base_input_left+offset_i);
         i += 3;
       }
     }

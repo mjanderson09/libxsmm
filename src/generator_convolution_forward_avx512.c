@@ -610,6 +610,7 @@ void libxsmm_generator_convolution_forward_avx512_kernel(
 
 #   include "template/kernel_repeat.tpl.c"
   } else {
+    libxsmm_x86_instruction_alu_imm( io_generated_code, l_conv_kernel_config.alu_mov_instruction, LIBXSMM_X86_GP_REG_R15, 1 );
 #   include "template/kernel_repeat.tpl.c"
   }
 
@@ -688,7 +689,7 @@ void libxsmm_generator_convolution_forward_avx512_ifmloop_one_row( libxsmm_gener
     expect_rsp_offset = 64;
   }
   /* Adjust rsp offset because we will do 8 pushes... */
-  expect_rsp_offset += 64;
+  expect_rsp_offset += 72;
   stdev_rsp_offset = expect_rsp_offset + 8;
   gamma_rsp_offset = expect_rsp_offset + 16;
   beta_rsp_offset = expect_rsp_offset + 24;
