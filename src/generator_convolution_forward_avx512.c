@@ -811,7 +811,7 @@ void libxsmm_generator_convolution_forward_avx512_ifmloop_one_row( libxsmm_gener
                   LIBXSMM_X86_GP_REG_UNDEF, 0,
                   l_disp,
                   i_conv_kernel_config->vector_name, 1,
-                  0, 0);
+                  0, 0, 0);
 
               if (i_conv_desc->jit_fuse_batch_norm_fwd) {
 
@@ -833,7 +833,7 @@ void libxsmm_generator_convolution_forward_avx512_ifmloop_one_row( libxsmm_gener
                     LIBXSMM_X86_GP_REG_UNDEF, 0,
                     l_disp,
                     i_conv_kernel_config->vector_name, 1,
-                    0, 1);
+                    0, 1, 0);
 
                 /* Apply BN  */
                 /* zmm1 =  SUB zmm1, "expect" */
@@ -905,7 +905,7 @@ void libxsmm_generator_convolution_forward_avx512_ifmloop_one_row( libxsmm_gener
                     LIBXSMM_X86_GP_REG_UNDEF, 0,
                     l_disp,
                     i_conv_kernel_config->vector_name, 2,
-                    0, 0);
+                    0, 0, 0);
 
                 libxsmm_x86_instruction_vec_compute_reg( io_generated_code,
                     i_conv_kernel_config->instruction_set,
@@ -936,7 +936,8 @@ void libxsmm_generator_convolution_forward_avx512_ifmloop_one_row( libxsmm_gener
                     2,
                     1,
                     1,
-                    1);
+                    1,
+					0);
 
                 /* zmm1 = BLEND(mask1, zmm2, zmm1)  */
                 libxsmm_x86_instruction_vec_compute_reg_mask( io_generated_code,
@@ -947,7 +948,8 @@ void libxsmm_generator_convolution_forward_avx512_ifmloop_one_row( libxsmm_gener
                     2,
                     1,
                     LIBXSMM_X86_IMM_UNDEF,
-                    1);
+                    1, 
+					0);
               }
 
               /* Store zmm1 to myinput buffer  */
@@ -958,7 +960,7 @@ void libxsmm_generator_convolution_forward_avx512_ifmloop_one_row( libxsmm_gener
                   LIBXSMM_X86_GP_REG_UNDEF, 0,
                   l_disp,
                   i_conv_kernel_config->vector_name, 1,
-                  0, 1);
+                  0, 1, 0);
 
             }
           }

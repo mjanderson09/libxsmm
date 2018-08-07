@@ -78,9 +78,11 @@ libxsmm_xmcopyfunction jitted_matcopy = handle->matcopy_fwd[0].xmatcopy;
 libxsmm_xmcopyfunction jitted_zero_overwrite = handle->matcopy_fwd[1].xmatcopy;
 libxsmm_convfunction kernel = (libxsmm_convfunction)handle->code_fwd[0].xconv.sconv;
 libxsmm_convfunction kernel2 = (libxsmm_convfunction)handle->code_fwd[1].xconv.sconv;
-libxsmm_convfunction kernel_pool[2];
+libxsmm_convfunction kernel3 = (libxsmm_convfunction)handle->code_fwd[2].xconv.sconv;
+libxsmm_convfunction kernel_pool[3];
 kernel_pool[0] = kernel;
 kernel_pool[1] = kernel2;
+kernel_pool[2] = kernel3;
 LIBXSMM_ALIGNED(float scale_factor, 64);
 LIBXSMM_ALIGNED(float *max_vals, 64) = NULL;
 char *variant = handle->kernel_fwd_variant_ptrs[ltid];
@@ -112,6 +114,7 @@ __m512 max_abs;
 
 kernel_pool[0] = kernel;
 kernel_pool[1] = kernel2;
+kernel_pool[2] = kernel3;
 
 /* Initialize base pointers */
 if (handle->padding_flag == 1) {
@@ -287,7 +290,8 @@ if (n_segments) {
               input_base + offset_i, weight_base + offset_w, output_base + offset_o,
               input_base + pi, weight_base + pw, output_base + po,
               bn_sum_base + offset_bn, bn_sum_base2 + offset_bn,
-              &scale_factor, max_vals, accumulators_scratch + offset_o);
+              &scale_factor, max_vals, accumulators_scratch + offset_o,
+			  NULL, NULL, NULL, NULL, NULL, NULL);
             ++pool_index;
             i += 3;
             ++bn_i;
@@ -399,7 +403,8 @@ if (n_segments) {
               input_base + offset_i, weight_base + offset_w, output_base + offset_o,
               input_base + pi, weight_base + pw, output_base + po,
               bn_sum_base + offset_bn, bn_sum_base2 + offset_bn,
-              &scale_factor, max_vals, accumulators_scratch + offset_o);
+              &scale_factor, max_vals, accumulators_scratch + offset_o,
+			  NULL, NULL, NULL, NULL, NULL, NULL);
             i += 3;
             ++bn_i;
           }
@@ -642,7 +647,8 @@ if (n_segments) {
             pi = stream[i+LOCAL_ENTRIES_PER_CONV+0];
             pw = stream[i+LOCAL_ENTRIES_PER_CONV+1];
             po = stream[i+LOCAL_ENTRIES_PER_CONV+2];
-            kernel_pool[vi]( input_base + offset_i, weight_base + offset_w, output_base + offset_o, input_base + pi, weight_base + pw, output_base + po, &scale_factor, max_vals);
+            kernel_pool[vi]( input_base + offset_i, weight_base + offset_w, output_base + offset_o, input_base + pi, weight_base + pw, output_base + po, &scale_factor, max_vals,
+			NULL, NULL, NULL, NULL, NULL, NULL);
             pool_index++;
             i+=LOCAL_ENTRIES_PER_CONV;
           }
@@ -886,7 +892,8 @@ if (n_segments) {
             kernel(
               input_base + offset_i, weight_base + offset_w, output_base + offset_o,
               input_base + pi, weight_base + pw, output_base + po,
-              &scale_factor, max_vals, accumulators_scratch + offset_o);
+              &scale_factor, max_vals, accumulators_scratch + offset_o,
+              NULL, NULL, NULL, NULL, NULL, NULL); 
             i += 3;
           }
 	  }
@@ -903,7 +910,7 @@ if (n_segments) {
             pw = stream[i+LOCAL_ENTRIES_PER_CONV+1];
             po = stream[i+LOCAL_ENTRIES_PER_CONV+2];
 	    {
-              kernel( input_base + offset_i, weight_base + offset_w, output_base + offset_o, input_base + pi, weight_base + pw, output_base + po, &scale_factor, max_vals);
+              kernel( input_base + offset_i, weight_base + offset_w, output_base + offset_o, input_base + pi, weight_base + pw, output_base + po, &scale_factor, max_vals, NULL, NULL, NULL, NULL, NULL, NULL);
 	    }
 	    pool_index++;
             i+=LOCAL_ENTRIES_PER_CONV;
@@ -988,7 +995,7 @@ if (n_segments) {
         kernel(
           input_base + offset_i, weight_base + offset_w, output_base + offset_o,
           input_base + pi, weight_base + pw, output_base + po,
-          &scale_factor, max_vals);
+          &scale_factor, max_vals, NULL, NULL, NULL, NULL, NULL, NULL);
         i += 3;
       }
     }
@@ -1016,7 +1023,8 @@ if (n_segments) {
         kernel_pool[vi](
           input_base + offset_i, weight_base + offset_w, output_base + offset_o,
           input_base + pi, weight_base + pw, output_base + po,
-          bn_sum_base + offset_bn, bn_sum_base2 + offset_bn, &scale_factor, max_vals);
+          bn_sum_base + offset_bn, bn_sum_base2 + offset_bn, &scale_factor, max_vals, 
+		  NULL, NULL, NULL, NULL, NULL, NULL);
         i += 3;
         ++bn_i;
       }
@@ -1032,7 +1040,8 @@ if (n_segments) {
         kernel(
           input_base + offset_i, weight_base + offset_w, output_base + offset_o,
           input_base + pi, weight_base + pw, output_base + po,
-          bn_sum_base + offset_bn, bn_sum_base2 + offset_bn, &scale_factor, max_vals);
+          bn_sum_base + offset_bn, bn_sum_base2 + offset_bn, &scale_factor, max_vals,
+		  NULL, NULL, NULL, NULL, NULL, NULL);
         i += 3;
         ++bn_i;
       }
@@ -1049,7 +1058,8 @@ if (n_segments) {
         po = stream[i+5];
         kernel_pool[vi](
           input_base + offset_i, weight_base + offset_w, output_base + offset_o,
-          input_base + pi, weight_base + pw, output_base + po, &scale_factor, max_vals);
+          input_base + pi, weight_base + pw, output_base + po, &scale_factor, max_vals,
+		  NULL, NULL, NULL, NULL, NULL, NULL);
         i += 3;
       }
     } else {
@@ -1062,7 +1072,8 @@ if (n_segments) {
         po = stream[i+5];
         kernel(
           input_base + offset_i, weight_base + offset_w, output_base + offset_o,
-          input_base + pi, weight_base + pw, output_base + po, &scale_factor, max_vals);
+          input_base + pi, weight_base + pw, output_base + po, &scale_factor, max_vals,
+		  NULL, NULL, NULL, NULL, NULL, NULL);
         i += 3;
       }
     }
