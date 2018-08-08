@@ -41,7 +41,6 @@
 
 # define USE_OVERWRITE
 /*# define USE_BWD_NO_FILTER_TRANSPOSE_OVERWRITE*/
-# define USE_FUSED_BATCH_STATS
 /*#define USE_FUSED_RELU_BWD*/
 
 #include "bench_defines.h"
