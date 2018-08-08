@@ -468,8 +468,10 @@ LIBXSMM_API_INTERN libxsmm_dnn_err_t libxsmm_dnn_setup_fwd( libxsmm_dnn_layer* h
   }
 
   /* FIXME: KNM specific tuning for Resnet */
-  if ( (handle->desc.C == 1024 && handle->desc.K == 256) || (handle->desc.C == 2048 && handle->desc.K == 512) ) {
-    handle->blocksifm_blocking = 8;
+  if (libxsmm_target_archid == LIBXSMM_X86_AVX512_KNM) {
+    if ( (handle->desc.C == 1024 && handle->desc.K == 256) || (handle->desc.C == 2048 && handle->desc.K == 512) ) {
+      handle->blocksifm_blocking = 8;
+    }
   }
 
   /* Restrict acc chain for overflow handling only if combo is int16/int32 */
