@@ -44,11 +44,11 @@
 # define USE_FUSED_BATCH_STATS
 /*#define USE_FUSED_RELU_BWD*/
 
-//#include "bench_defines.h"
-#define USE_FUSED_BATCH_NORM_FWD
+#include "bench_defines.h"
+//#define USE_FUSED_BATCH_NORM_FWD
 //#define USE_ELEMENTWISE_FWD
-#define USE_FUSED_BATCH_NORM_RELU_FWD
-#define USE_FUSE_LEVEL_FOURPASS
+//#define USE_FUSED_BATCH_NORM_RELU_FWD
+//#define USE_FUSE_LEVEL_FOURPASS
 //#define USE_FUSE_LEVEL_NAIVE
 //#define USE_FUSE_LEVEL_IFM
 //#define USE_FUSE_LEVEL_KERNEL
@@ -114,6 +114,7 @@ LIBXSMM_INLINE void init_buf(float* buf, size_t size, int initPos, int initOne)
   zero_buf(buf, size);
   for (i = 0; i < (int)size; ++i) {
     buf[i] = (float)((initOne != 0) ? 1.0 : ((initPos != 0) ? libxsmm_rand_f64() : (0.05 - libxsmm_rand_f64()/10.0)));
+	buf[i] = buf[i] * buf[i];
   }
 }
 

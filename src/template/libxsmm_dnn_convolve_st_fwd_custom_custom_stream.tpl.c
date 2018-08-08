@@ -947,6 +947,7 @@ if (n_segments) {
       instr = code_stream[pc].segment_type;
       n_convs = code_stream[pc].n_convs;
       if (instr == IMG_LOOP_INIT) {
+        img = code_stream[pc].aux_index;
         /* Padding code via jitted matcopy kernel */
 		if((handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_NAIVE) ==  0 && (handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_FOURPASS) == 0)
 		{
