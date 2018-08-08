@@ -187,7 +187,7 @@ if (n_segments) {
             img = code_stream[pc].aux_index;
 
             /* Apply padding  */
-			if((handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_NAIVE) ==  0)
+			if(((handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_NAIVE) ==  0) && ((handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_FOURPASS) == 0))
 			{
               if (handle->padding_flag == 1) {
 #include "libxsmm_dnn_fwd_custom_custom_padding.tpl.c"
@@ -199,7 +199,13 @@ if (n_segments) {
 			     my_w_start = code_stream[pc].aux_index1;
 			     my_h_end = code_stream[pc].aux_index2;
 			     my_w_end = code_stream[pc].aux_index3;
+				 if((handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_NAIVE) != 0)
+				 {
 #include "libxsmm_dnn_fwd_custom_custom_apply_bn_naive.tpl.c"
+                 } else if((handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_FOURPASS) != 0)
+				 {
+#include "libxsmm_dnn_fwd_custom_custom_apply_bn_fourpass.tpl.c"
+				 }
 			}
 
           }
@@ -300,7 +306,7 @@ if (n_segments) {
           if (instr == IMG_LOOP_INIT) {
             img = code_stream[pc].aux_index;
             /* Apply padding  */
-			if((handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_NAIVE) ==  0)
+			if(((handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_NAIVE) ==  0) && ((handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_FOURPASS) == 0))
 			{
               if (handle->padding_flag == 1) {
 #include "libxsmm_dnn_fwd_custom_custom_padding.tpl.c"
@@ -312,7 +318,13 @@ if (n_segments) {
 			     my_w_start = code_stream[pc].aux_index1;
 			     my_h_end = code_stream[pc].aux_index2;
 			     my_w_end = code_stream[pc].aux_index3;
+				 if((handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_NAIVE) != 0)
+				 {
 #include "libxsmm_dnn_fwd_custom_custom_apply_bn_naive.tpl.c"
+                 } else if((handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_FOURPASS) != 0)
+				 {
+#include "libxsmm_dnn_fwd_custom_custom_apply_bn_fourpass.tpl.c"
+				 }
 			}
 
           }
@@ -414,7 +426,7 @@ if (n_segments) {
           if (instr == IMG_LOOP_INIT) {
             img = code_stream[pc].aux_index;
             /* Apply padding  */
-			if((handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_NAIVE) ==  0)
+			if(((handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_NAIVE) ==  0) && ((handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_FOURPASS) == 0))
 			{
               if (handle->padding_flag == 1) {
 #include "libxsmm_dnn_fwd_custom_custom_padding.tpl.c"
@@ -426,7 +438,13 @@ if (n_segments) {
 			     my_w_start = code_stream[pc].aux_index1;
 			     my_h_end = code_stream[pc].aux_index2;
 			     my_w_end = code_stream[pc].aux_index3;
+				 if((handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_NAIVE) != 0)
+				 {
 #include "libxsmm_dnn_fwd_custom_custom_apply_bn_naive.tpl.c"
+                 } else if((handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_FOURPASS) != 0)
+				 {
+#include "libxsmm_dnn_fwd_custom_custom_apply_bn_fourpass.tpl.c"
+				 }
 			}
           }
 
@@ -654,7 +672,7 @@ if (n_segments) {
           if (instr == IMG_LOOP_INIT) {
             img = code_stream[pc].aux_index;
             /* Apply padding  */
-			if((handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_NAIVE) ==  0)
+			if(((handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_NAIVE) ==  0) && ((handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_FOURPASS) == 0))
 			{
               if (handle->padding_flag == 1) {
 #include "libxsmm_dnn_fwd_custom_custom_padding.tpl.c"
@@ -666,7 +684,13 @@ if (n_segments) {
 			     my_w_start = code_stream[pc].aux_index1;
 			     my_h_end = code_stream[pc].aux_index2;
 			     my_w_end = code_stream[pc].aux_index3;
+				 if((handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_NAIVE) != 0)
+				 {
 #include "libxsmm_dnn_fwd_custom_custom_apply_bn_naive.tpl.c"
+                 } else if((handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_FOURPASS) != 0)
+				 {
+#include "libxsmm_dnn_fwd_custom_custom_apply_bn_fourpass.tpl.c"
+				 }
 			}
           }
 
@@ -924,7 +948,7 @@ if (n_segments) {
       n_convs = code_stream[pc].n_convs;
       if (instr == IMG_LOOP_INIT) {
         /* Padding code via jitted matcopy kernel */
-		if((handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_NAIVE) ==  0)
+		if((handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_NAIVE) ==  0 && (handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_FOURPASS) == 0)
 		{
 #include "libxsmm_dnn_fwd_custom_custom_padding_img_par.tpl.c"
         }
@@ -935,7 +959,13 @@ if (n_segments) {
 		     my_w_start = code_stream[pc].aux_index1;
 		     my_h_end = code_stream[pc].aux_index2;
 		     my_w_end = code_stream[pc].aux_index3;
+				 if((handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_NAIVE) != 0)
+				 {
 #include "libxsmm_dnn_fwd_custom_custom_apply_bn_naive.tpl.c"
+                 } else if((handle->fuse_ops & LIBXSMM_DNN_CONV_BN_FUSE_LEVEL_FOURPASS) != 0)
+				 {
+#include "libxsmm_dnn_fwd_custom_custom_apply_bn_fourpass.tpl.c"
+				 }
 		}
       }
 

@@ -421,6 +421,7 @@ LIBXSMM_EXTERN_C struct LIBXSMM_RETARGETABLE libxsmm_dnn_layer {
   libxsmm_dnn_tensor* reg_input_tr;
   libxsmm_dnn_tensor* reg_filter_tr;
   /* batchnorm stats */
+  libxsmm_dnn_tensor* ifm_batch_stats;
   libxsmm_dnn_tensor* batch_stats;
   /* maxstats used in low-precision kernels */
   libxsmm_dnn_tensor* maxstats_fwd;
