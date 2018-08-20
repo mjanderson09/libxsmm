@@ -702,6 +702,9 @@ int main(int argc, char* argv[])
     pad_w_out = pad_w;
   }
 
+  printf("Pad h in: %d\n", pad_h_in);
+  printf("Pad w in: %d\n", pad_w_in);
+
   /* deriving some values for naive code */
   ofh = (ifh + 2 * pad_h - kh) / stride_h + 1;
   ofw = (ifw + 2 * pad_w - kw) / stride_w + 1;
@@ -1354,6 +1357,7 @@ int main(int argc, char* argv[])
         int ch_i = 0;
         int ch_j = 0;
         int pxl_i = 0;
+        int pxl_j = 0;
         LIBXSMM_VLA_DECL(4, float, sum_fuse,  ifm_batchstats_libxsmm, nIfm/16, nImg, 16);
         LIBXSMM_VLA_DECL(3, float, sum_naive, naive_input_save,       nIfm, ifhp*ifwp);
 
@@ -1379,21 +1383,31 @@ int main(int argc, char* argv[])
         for ( img_i = 0; img_i < nImg; ++img_i ) {
           for ( ch_i = 0; ch_i < nIfm; ++ch_i ) {
 		    float chan_sum = 0.0;
-            for ( pxl_i = 0; pxl_i < ifhp*ifwp; ++pxl_i ) {
-              const float f = LIBXSMM_VLA_ACCESS(3, sum_naive, img_i, ch_i, pxl_i, nIfm, ifhp*ifwp);
+            for ( pxl_i = 0; pxl_i < ifh ; ++pxl_i ) {
+            for ( pxl_j = 0 ; pxl_j < ifw ; ++pxl_j) {
+              int pxl_i_pad = pxl_i + pad_h_in;
+              int pxl_j_pad = pxl_j + pad_w_in;
+              int pxl = pxl_j_pad + pxl_i_pad * ifwp;
+              const float f = LIBXSMM_VLA_ACCESS(3, sum_naive, img_i, ch_i, pxl, nIfm, ifhp*ifwp);
               chan_sum  += f;
             }
-            ch_sum[ch_i] += chan_sum / (float)(ifhp*ifwp);
+            }
+            ch_sum[ch_i] += chan_sum / (float)(ifh * ifw);
 		  }
 		}
         for ( img_i = 0; img_i < nImg; ++img_i ) {
           for ( ch_i = 0; ch_i < nIfm; ++ch_i ) {
 		    float chan_sum2 = 0.0;
-            for ( pxl_i = 0; pxl_i < ifhp*ifwp; ++pxl_i ) {
-              const float f = LIBXSMM_VLA_ACCESS(3, sum_naive, img_i, ch_i, pxl_i, nIfm, ifhp*ifwp);
+            for ( pxl_i = 0; pxl_i < ifh; ++pxl_i ) {
+            for ( pxl_j = 0 ; pxl_j < ifw ; ++pxl_j) {
+              int pxl_i_pad = pxl_i + pad_h_in;
+              int pxl_j_pad = pxl_j + pad_w_in;
+              int pxl = pxl_j_pad + pxl_i_pad * ifwp;
+              const float f = LIBXSMM_VLA_ACCESS(3, sum_naive, img_i, ch_i, pxl, nIfm, ifhp*ifwp);
 			  chan_sum2 += (f-naive_expect[ch_i]) * (f-naive_expect[ch_i]);
             }
-            ch_sum2[ch_i] += chan_sum2 / (float)(ifhp*ifwp);
+            }
+            ch_sum2[ch_i] += chan_sum2 / (float)(ifh * ifw);
           }
         }
 
