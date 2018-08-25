@@ -174,6 +174,8 @@ for (ltid = 0; ltid < handle->desc.threads; ltid++)
 
   /* Perform a dryrun to compute the memory requirements of the stream of indices */
   if (loop_order == MIXED) {
+    int printflag = 1;
+
     if (handle->use_lp_kernel == 0) { /* Well, in this case leave loop as is...  */
       for (img = my_img_start; img < my_img_end; img++) {
         if (mark_img_init== 1) {
@@ -187,6 +189,18 @@ for (ltid = 0; ltid < handle->desc.threads; ltid++)
                   for (oj = ojb; oj < LIBXSMM_MIN(ojb+handle->block_fwd_oj,handle->ofh); oj += handle->fwd_ofh_rb) {
                     for (oi = 0; oi < handle->ofw ; oi += handle->fwd_ofw_rb) {
                       local_entries += LOCAL_ENTRIES_PER_CONV;
+    if(ltid == 0 && (handle->use_fwd_for_bwd == 0) && printflag)
+    {
+    printflag = 0;
+    printf("ofmb: %d\t%d\t%d\n", my_ofm_start, my_ofm_end, handle->block_fwd_ofm);
+    printf("ifmb: %d\t%d\t%d\n", 0, BLOCKSIFM , handle->block_fwd_ifm);
+    printf("ojb: %d\t%d\t%d\n", 0, handle->ofh, handle->block_fwd_oj);
+    printf("ofm1: ofmb\t%d\t%d\n", LIBXSMM_MIN(ofmb+handle->block_fwd_ofm, my_ofm_end), 1);
+    printf("ifm1: ifmb\t%d\t%d\n", LIBXSMM_MIN(ifmb+handle->block_fwd_ifm, BLOCKSIFM), BLOCKSIFM_BLOCKING);
+    printf("oj: ojb\t%d\t%d\n", LIBXSMM_MIN(ojb+handle->block_fwd_oj,handle->ofh), handle->fwd_ofh_rb);
+    printf("oi: %d\t%d\t%d\n", 0, handle->ofw, handle->fwd_ofw_rb);
+    }
+
 
                       if (mark_ifm_init == 1) {
 		                if((INTERLEAVED_BATCH_NORM == 1 && ofmb == my_ofm_start && ofm1 == ofmb) || 
@@ -273,6 +287,7 @@ for (ltid = 0; ltid < handle->desc.threads; ltid++)
   }
 
   if (loop_order == HWKC) {
+    int printflag = 1;
     for (img = my_img_start; img < my_img_end; img++) {
       if (mark_img_init== 1) {
         n_code_segments++;
@@ -284,6 +299,18 @@ for (ltid = 0; ltid < handle->desc.threads; ltid++)
               for (ofm1 = ofmb; ofm1 < LIBXSMM_MIN(ofmb+handle->block_fwd_ofm, my_ofm_end); ofm1++ ) {
                 for (ifmb = 0; ifmb < BLOCKSIFM; ifmb += handle->block_fwd_ifm) {
                   for (ifm1 = ifmb; ifm1 < LIBXSMM_MIN(ifmb+handle->block_fwd_ifm, BLOCKSIFM); ifm1 += BLOCKSIFM_BLOCKING) {
+
+    if(ltid == 0 && (handle->use_fwd_for_bwd == 0) && printflag)
+    {
+    printf("ofmb: %d\t%d\t%d\n", my_ofm_start, my_ofm_end, handle->block_fwd_ofm);
+    printf("ojb: %d\t%d\t%d\n", 0, handle->ofh, handle->block_fwd_oj);
+    printf("oj: ojb\t%d\t%d\n", LIBXSMM_MIN(ojb+handle->block_fwd_oj,handle->ofh), handle->fwd_ofh_rb);
+    printf("oi: %d\t%d\t%d\n", 0, handle->ofw, handle->fwd_ofw_rb);
+    printf("ofm1: ofmb\t%d\t%d\n", LIBXSMM_MIN(ofmb+handle->block_fwd_ofm, my_ofm_end), 1);
+    printf("ifmb: %d\t%d\t%d\n", 0, BLOCKSIFM , handle->block_fwd_ifm);
+    printf("ifm1: ifmb\t%d\t%d\n", LIBXSMM_MIN(ifmb+handle->block_fwd_ifm, BLOCKSIFM), BLOCKSIFM_BLOCKING);
+    printflag = 0;
+    }
 
                     local_entries += LOCAL_ENTRIES_PER_CONV;
 
@@ -355,6 +382,7 @@ for (ltid = 0; ltid < handle->desc.threads; ltid++)
 
   /* Second run to compute actual indices */
   if (loop_order == MIXED) {
+    int printflag = 1;
     if (handle->use_lp_kernel == 0) { /* Well, in this case leave loop as is...  */
       for (img = my_img_start; img < my_img_end; img++) {
         if (mark_img_init== 1 && 0 != tmp_expanded_stream && 0 != dbg_expanded_stream) {
@@ -685,7 +713,6 @@ for (ltid = 0; ltid < handle->desc.threads; ltid++)
               for (ofm1 = ofmb; ofm1 < LIBXSMM_MIN(ofmb+handle->block_fwd_ofm, my_ofm_end); ofm1++ ) {
                 for (ifmb = 0; ifmb < BLOCKSIFM; ifmb += handle->block_fwd_ifm) {
                   for (ifm1 = ifmb; ifm1 < LIBXSMM_MIN(ifmb+handle->block_fwd_ifm, BLOCKSIFM); ifm1 += BLOCKSIFM_BLOCKING) {
-
                     if ( handle->use_fwd_for_bwd == 0 ) {
                       ij_use = oj * handle->desc.u;
                       ii_use = oi * handle->desc.v;
@@ -868,6 +895,7 @@ for (ltid = 0; ltid < handle->desc.threads; ltid++)
     encoded_stream_index = 0;
 
     if (loop_order == MIXED) {
+
       if (handle->use_lp_kernel == 0) { /* Well, in this case leave loop as is...  */
         for (img = my_img_start; img < my_img_end; img++) {
           if (mark_img_init== 1) {
