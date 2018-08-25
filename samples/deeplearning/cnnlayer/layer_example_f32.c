@@ -44,14 +44,14 @@
 # define USE_FUSED_BATCH_STATS
 /*#define USE_FUSED_RELU_BWD*/
 
-//#include "bench_defines.h"
-#define USE_FUSED_BATCH_NORM_FWD
-#define USE_ELEMENTWISE_FWD
-#define USE_FUSED_BATCH_NORM_RELU_FWD
+#include "bench_defines.h"
+//#define USE_FUSED_BATCH_NORM_FWD
+//#define USE_ELEMENTWISE_FWD
+//#define USE_FUSED_BATCH_NORM_RELU_FWD
 //#define USE_FUSE_LEVEL_NAIVE
 //#define USE_FUSE_LEVEL_IFM
 //#define USE_FUSE_LEVEL_KERNEL
-#define USE_FUSE_LEVEL_JIT
+//#define USE_FUSE_LEVEL_JIT
 
 //#define USE_FUSED_BATCH_NORM_BWD
 //#define USE_SPLIT_BWD
@@ -1236,7 +1236,7 @@ int main(int argc, char* argv[])
 
 #if defined(USE_FUSED_BATCH_NORM_FWD) || defined(USE_FUSED_BATCH_NORM_RELU_FWD)
       printf("Input streaming store\n");
-      //libxsmm_matdiff(LIBXSMM_DATATYPE_F32, nImg*nIfm*ifhp*ifwp, 1, naive_input_st, naive_libxsmm_input_st, 0, 0, &norms_fwd);
+      libxsmm_matdiff(LIBXSMM_DATATYPE_F32, nImg*nIfm*ifhp*ifwp, 1, naive_input_st, naive_libxsmm_input_st, 0, 0, &norms_fwd);
       printf("Input store:\n");
       printf("L1 reference  : %.25g\n", norms_fwd.l1_ref);
       printf("L1 test       : %.25g\n", norms_fwd.l1_tst);
@@ -1245,7 +1245,7 @@ int main(int argc, char* argv[])
       printf("Linf abs.error: %.24f\n", norms_fwd.linf_abs);
       printf("Linf rel.error: %.24f\n", norms_fwd.linf_rel);
       printf("Check-norm    : %.24f\n", norms_fwd.normf_rel);
-      //libxsmm_matdiff_reduce(&diff, &norms_fwd);
+      libxsmm_matdiff_reduce(&diff, &norms_fwd);
 
       libxsmm_matdiff(LIBXSMM_DATATYPE_F32, nImg*nIfm*ifhp*ifwp, 1, naive_input, naive_libxsmm_input, 0, 0, &norms_fwd);
       printf("Input overwritten by BN\n");
@@ -1308,6 +1308,7 @@ int main(int argc, char* argv[])
         printf("Linf abs.error: %.24f\n", norms_batchstats.linf_abs);
         printf("Linf rel.error: %.24f\n", norms_batchstats.linf_rel);
         printf("Check-norm    : %.24f\n", norms_batchstats.normf_rel);
+        libxsmm_matdiff_reduce(&diff, &norms_batchstats);
 
         libxsmm_matdiff(LIBXSMM_DATATYPE_F32, nOfm, 1, ch_sum2, ch_sum2_fuse, 0, 0, &norms_batchstats);
         printf("Channel Sum2:\n");
@@ -1318,6 +1319,7 @@ int main(int argc, char* argv[])
         printf("Linf abs.error: %.24f\n", norms_batchstats.linf_abs);
         printf("Linf rel.error: %.24f\n", norms_batchstats.linf_rel);
         printf("Check-norm    : %.24f\n", norms_batchstats.normf_rel);
+        libxsmm_matdiff_reduce(&diff, &norms_batchstats);
 
         free(ch_sum);
         free(ch_sum2);
