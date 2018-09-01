@@ -702,9 +702,6 @@ int main(int argc, char* argv[])
     pad_w_out = pad_w;
   }
 
-  printf("Pad h in: %d\n", pad_h_in);
-  printf("Pad w in: %d\n", pad_w_in);
-
   /* deriving some values for naive code */
   ofh = (ifh + 2 * pad_h - kh) / stride_h + 1;
   ofw = (ifw + 2 * pad_w - kw) / stride_w + 1;
