@@ -2,6 +2,7 @@
 
 export OMP_NUM_THREADS=28
 export KMP_AFFINITY=granularity=fine,compact,1,0
+source setup.sh
 source compile.sh
 
 echo "" > bench_defines.h
