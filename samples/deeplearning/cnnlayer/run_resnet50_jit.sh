@@ -87,7 +87,7 @@ fi
 echo "PERFDUMP" && \
 echo "PERFDUMP" && \
 ${NUMACTL} ./layer_example_${BIN}_bn_jit ${ITERS}  56  56  ${MB}  64   256 1 1 0 0 1 ${TYPE} ${FORMAT} ${PAD}  && \
-${NUMACTL} ./layer_example_${BIN}_bn_jit ${ITERS}  56  56  ${MB}  64    64 1 1 0 0 1 ${TYPE} ${FORMAT} ${PAD}  && \
+echo "PERFDUMP" && \
 echo "PERFDUMP" && \
 ${NUMACTL} ./layer_example_${BIN}_bne_jit ${ITERS}  56  56  ${MB}  256   64 1 1 0 0 1 ${TYPE} ${FORMAT} ${PAD}  && \
 echo "PERFDUMP" && \
@@ -104,4 +104,4 @@ echo "PERFDUMP" && \
 ${NUMACTL} ./layer_example_${BIN}_bne_jit ${ITERS}  14  14  ${MB} 1024  512 1 1 0 0 2 ${TYPE} ${FORMAT} ${PAD}   && \
 echo "PERFDUMP" && \
 ${NUMACTL} ./layer_example_${BIN}_bn_jit ${ITERS}   7   7  ${MB}  512 2048 1 1 0 0 1 ${TYPE} ${FORMAT} ${PAD}  && \
-echo "PERFDUMP" 
+${NUMACTL} ./layer_example_${BIN}_bne_jit ${ITERS}   7   7  ${MB} 2048  512 1 1 0 0 1 ${TYPE} ${FORMAT} ${PAD}
