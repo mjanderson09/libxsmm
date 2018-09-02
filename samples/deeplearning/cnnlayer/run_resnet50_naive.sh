@@ -88,7 +88,7 @@ fi
 ${NUMACTL} ./layer_example_${BIN}_nobn ${ITERS}  224 224 ${MB}  3     64 7 7 3 3 2 ${TYPE} ${FORMAT} ${PAD}  && \
 ${NUMACTL} ./layer_example_${BIN}_nobn ${ITERS}  56  56  ${MB}  64   256 1 1 0 0 1 ${TYPE} ${FORMAT} ${PAD}  && \
 ${NUMACTL} ./layer_example_${BIN}_bn_naive ${ITERS}  56  56  ${MB}  64   256 1 1 0 0 1 ${TYPE} ${FORMAT} ${PAD}  && \
-${NUMACTL} ./layer_example_${BIN}_bn_naive ${ITERS}  56  56  ${MB}  64    64 1 1 0 0 1 ${TYPE} ${FORMAT} ${PAD}  && \
+${NUMACTL} ./layer_example_${BIN}_nobn ${ITERS}  56  56  ${MB}  64    64 1 1 0 0 1 ${TYPE} ${FORMAT} ${PAD}  && \
 ${NUMACTL} ./layer_example_${BIN}_bn_naive ${ITERS}  56  56  ${MB}  64    64 3 3 1 1 1 ${TYPE} ${FORMAT} ${PAD}  && \
 ${NUMACTL} ./layer_example_${BIN}_bne_naive ${ITERS}  56  56  ${MB}  256   64 1 1 0 0 1 ${TYPE} ${FORMAT} ${PAD}  && \
 ${NUMACTL} ./layer_example_${BIN}_nobn ${ITERS}  56  56  ${MB}  256  512 1 1 0 0 2 ${TYPE} ${FORMAT} ${PAD}    && \
@@ -105,4 +105,4 @@ ${NUMACTL} ./layer_example_${BIN}_nobn ${ITERS}  14  14  ${MB} 1024 2048 1 1 0 0
 ${NUMACTL} ./layer_example_${BIN}_bne_naive ${ITERS}  14  14  ${MB} 1024  512 1 1 0 0 2 ${TYPE} ${FORMAT} ${PAD}   && \
 ${NUMACTL} ./layer_example_${BIN}_bn_naive ${ITERS}   7   7  ${MB}  512  512 3 3 1 1 1 ${TYPE} ${FORMAT} ${PAD}   && \
 ${NUMACTL} ./layer_example_${BIN}_bn_naive ${ITERS}   7   7  ${MB}  512 2048 1 1 0 0 1 ${TYPE} ${FORMAT} ${PAD}   && \
-${NUMACTL} ./layer_example_${BIN}_nobn ${ITERS}   7   7  ${MB} 2048  512 1 1 0 0 1 ${TYPE} ${FORMAT} ${PAD}
+${NUMACTL} ./layer_example_${BIN}_bne_naive ${ITERS}   7   7  ${MB} 2048  512 1 1 0 0 1 ${TYPE} ${FORMAT} ${PAD}
