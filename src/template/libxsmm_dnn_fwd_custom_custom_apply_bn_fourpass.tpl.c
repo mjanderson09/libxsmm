@@ -45,6 +45,27 @@ for(ifm_idx = 0 ; ifm_idx < handle->blocksifm  ; ifm_idx++ )
       BLOCKSIFM, handle->ifhp, handle->ifwp, handle->ifmblock, handle->fm_lp_block);
     element_input_type * ifm_bn_sum_base =  &LIBXSMM_VLA_ACCESS(4, ifm_kernel_stats, 0, ifm_idx, img, 0, BLOCKSIFM, handle->desc.N, handle->ifmblock);
     element_input_type * ifm_bn_sum_base2 =  &LIBXSMM_VLA_ACCESS(4, ifm_kernel_stats, 1, ifm_idx, img, 0, BLOCKSIFM, handle->desc.N, handle->ifmblock);
+
+    if(handle->ifmblock == 16)
+    {
+
+    __m512 _ifm_bn_sum_base;
+    _ifm_bn_sum_base = _mm512_set1_ps(0.0f);
+    for(my_h = my_h_start ; my_h < my_h_end ; my_h++) 
+    {
+      for(my_w = my_w_start ; my_w < my_w_end ; my_w++)
+      {
+        __m512 _input_st = _mm512_load_ps(myinput_st + (my_w + handle->desc.pad_w_in) * handle->ifmblock + (my_h + handle->desc.pad_h_in) * handle->ifmblock * handle->ifwp);
+        _ifm_bn_sum_base = _mm512_add_ps(_input_st, _ifm_bn_sum_base);
+      }
+    }
+    float scale = 1.0f / (float)(handle->desc.H * handle->desc.W);
+    __m512 _scale = _mm512_set1_ps(scale);
+    _ifm_bn_sum_base = _mm512_mul_ps(_scale, _ifm_bn_sum_base);
+    _mm512_store_ps(ifm_bn_sum_base, _ifm_bn_sum_base);
+
+    } else {
+
 	#pragma simd
     for(my_c = 0 ; my_c < handle->ifmblock ; my_c++)
     {
@@ -62,11 +83,14 @@ for(ifm_idx = 0 ; ifm_idx < handle->blocksifm  ; ifm_idx++ )
         }
       }
     }
+    float scale = 1.0f / (float)(handle->desc.H * handle->desc.W);
 	#pragma simd
     for(my_c = 0 ; my_c < handle->ifmblock ; my_c++)
     {
-	  ifm_bn_sum_base[my_c] /= (float)(handle->desc.H * handle->desc.W);
+      ifm_bn_sum_base[my_c] *= scale;;
 	}
+
+    }
 }
 
 // Variance
@@ -78,6 +102,26 @@ for(ifm_idx = handle->blocksifm - 1 ; ifm_idx >= 0 ; ifm_idx-- )
     element_input_type * ifm_bn_sum_base =  &LIBXSMM_VLA_ACCESS(4, ifm_kernel_stats, 0, ifm_idx, img, 0, BLOCKSIFM, handle->desc.N, handle->ifmblock);
     element_input_type * ifm_bn_sum_base2 =  &LIBXSMM_VLA_ACCESS(4, ifm_kernel_stats, 1, ifm_idx, img, 0, BLOCKSIFM, handle->desc.N, handle->ifmblock);
     element_input_type * myexpect = (element_input_type*) &(LIBXSMM_VLA_ACCESS(  2, expect, ifm_idx, 0, handle->ifmblock));
+
+    if(handle->ifmblock == 16)
+    {
+    __m512 _ifm_bn_sum_base2;
+    _ifm_bn_sum_base2 = _mm512_set1_ps(0.0f);
+    for(my_h = my_h_start ; my_h < my_h_end ; my_h++) 
+    {
+      for(my_w = my_w_start ; my_w < my_w_end ; my_w++)
+      {
+        __m512 _input_st = _mm512_load_ps(myinput_st + (my_w + handle->desc.pad_w_in) * handle->ifmblock + (my_h + handle->desc.pad_h_in) * handle->ifmblock * handle->ifwp);
+        __m512 _myexpect = _mm512_load_ps(myexpect);
+        __m512 _after = _mm512_sub_ps(_input_st, _myexpect);
+        _ifm_bn_sum_base2 = _mm512_add_ps(_ifm_bn_sum_base2, _mm512_mul_ps(_after, _after));
+      }
+    }
+    float scale = 1.0f / (float)(handle->desc.H * handle->desc.W);
+    __m512 _scale = _mm512_set1_ps(scale);
+    _ifm_bn_sum_base2 = _mm512_mul_ps(_scale, _ifm_bn_sum_base2);
+    _mm512_store_ps(ifm_bn_sum_base2, _ifm_bn_sum_base2);
+    } else {
 	#pragma simd
     for(my_c = 0 ; my_c < handle->ifmblock ; my_c++)
     {
@@ -96,11 +140,14 @@ for(ifm_idx = handle->blocksifm - 1 ; ifm_idx >= 0 ; ifm_idx-- )
         }
       }
     }
+    float scale = 1.0f / (float)(handle->desc.H * handle->desc.W);
 	#pragma simd
     for(my_c = 0 ; my_c < handle->ifmblock ; my_c++)
     {
-	  ifm_bn_sum_base2[my_c] /= (float)(handle->desc.H * handle->desc.W);
+	  ifm_bn_sum_base2[my_c] *= scale;
 	}
+
+    }
 }
 
 // Batch norm
